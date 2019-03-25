@@ -1,0 +1,28 @@
+{
+  "name": "nuxeo-tasks",
+  "version": "1.0.0",
+  "description": "nuxeo task examples",
+  "main": "gulpfile.js",
+  "scripts": {
+    "test": "npm test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mlefree/nuxeo-tasks.git"
+  },
+  "keywords": [
+    "nuxeo",
+    "node"
+  ],
+  "author": "mle",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/mlefree/nuxeo-tasks/issues"
+  },
+  "homepage": "https://github.com/mlefree/nuxeo-tasks#readme",
+  "dependencies": {
+    "gulp": "^4.0.0",
+    "mongodb": "^3.2.2",
+    "nuxeo": "^3.11.0"
+  }
+}
