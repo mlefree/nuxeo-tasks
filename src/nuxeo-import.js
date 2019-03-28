@@ -3,35 +3,48 @@
 const fs = require('fs');
 const through = require('through2');
 const Nuxeo = require('nuxeo');
+const randomSentence = require('random-sentence');
 const {database} = require('./database');
+const emailAddresses = require("email-addresses");
+
+const readFile = (path, opts = 'utf8') => {
+    return new Promise((resolve, reject) => {
+        fs.readFile(path, opts, (err, data) => {
+            if (err) reject(err)
+            else resolve(data)
+        })
+    });
+};
 
 const nuxeoImport = (inTestMode) => {
     let myModule = {};
     myModule.internal = {};
     myModule.public = {};
 
+    myModule.internal.importCount = 0;
+    myModule.internal.importCountLimit = 400000;
+    myModule.internal.importErrorCount = 0;
     myModule.internal.nuxeoClient = null;
     myModule.internal.database = null;
-    myModule.internal.defaultRepo = '/default-domain/workspaces/test/';
-    myModule.internal.testReadQuery = "SELECT * FROM Document"
-        + " WHERE ecm:primaryType = 'File'"
-        + " AND ecm:path STARTSWITH '/default-domain/workspaces/'"
-    //+ " AND content/data IS NOT NULL"
-    //+ " AND dc:title <> content/name"
-    //+ " AND ecm:isProxy = 0 AND ecm:isCheckedInVersion = 0"
-    //+ " AND ecm:currentLifeCycleState != 'deleted'"
-    ;
-    myModule.internal.testSampleQuery = "SELECT ecm:uuid, ecm:fulltextScore FROM Document WHERE ecm:fulltext = '*'"
-    ;
+    myModule.internal.defaultRepo = '/default-domain/workspaces/test-perf-node/';
+    myModule.internal.structureGetter = (id, folderId, folderCount) => {
+        const filename = 'file-' + folderId + '-' + folderCount;
+        return {
+            'entity-type': 'document',
+            name: filename,
+            type: 'File',
+            properties: {
+                'dc:title': filename,
+                'dc:description': randomSentence()
+            }
+        };
+    };
+    // Perf tuning
+    myModule.internal.nuxeoClientOption = {transactionTimeout: 1000, timeout: 1000, forever: true};
+    myModule.internal.nuxeoImportThreads = 4;
+    myModule.internal.nuxeoImportFolderCapacity = 20;
 
-    myModule.internal.init = () => {
-
-        if (!myModule.internal.database) {
-            database(inTestMode).$connect()
-                .then((db) => {
-                    myModule.internal.database = db;
-                });
-        }
+    myModule.internal.$init = async () => {
 
         if (!myModule.internal.nuxeoClient) {
             myModule.internal.nuxeoClient = new Nuxeo({
@@ -39,135 +52,32 @@ const nuxeoImport = (inTestMode) => {
                 auth: {
                     method: 'basic',
                     username: process.env.NUXEO_LOGIN || 'Administrator',
-                    password: process.env.NUXEO_PASSWORD || 'Administrator'
+                    password: process.env.NUXEO_PASSWORD || 'Administrator',
                 }
             });
         }
+
+        return new Promise((resolve, reject) => {
+
+            if (!myModule.internal.database) {
+                database.$connect()
+                    .then((db) => {
+                        myModule.internal.database = db;
+                        resolve();
+                    })
+                    .catch((err) => {
+                        console.error(err);
+                        reject(err);
+                    });
+            } else {
+                resolve();
+            }
+        });
     };
 
-    myModule.internal.$readAllDocs = () => {
+    myModule.internal.$createOneDocWithBlob = async () => {
 
-        myModule.internal.init();
-
-        let query = myModule.internal.testReadQuery;
-        console.log(query);
-
-        return myModule.internal.nuxeoClient
-            .repository()
-            .schemas(['dublincore', 'file'])
-            .query({query: query})
-            ;
-    };
-
-    myModule.internal.$readOneDoc = (doc) => {
-
-        myModule.internal.init();
-
-        const beforeRequest = new Date();
-
-        let query = `SELECT * FROM Document WHERE uid = "${doc.uid}"`;
-        // console.log(query);
-
-        return myModule.internal.nuxeoClient
-            .repository()
-            .schemas(['dublincore', 'file'])
-            .query({query: query})
-            .then(doc => {
-                doc.requestTimeSpentInMs = new Date() - beforeRequest;
-                return Promise.resolve(doc);
-            })
-            .catch(err => {
-                const doc = {};
-                doc.requestTimeSpentInMs = new Date() - beforeRequest;
-                console.error(err);
-                return Promise.resolve(doc);
-            });
-    };
-
-    myModule.internal.$readQuery = (query) => {
-
-        myModule.internal.init();
-
-        const beforeRequest = new Date();
-
-        return myModule.internal.nuxeoClient
-            .repository()
-            //.schemas(['dublincore', 'file'])
-            .enricher('document', 'thumbnail')
-            .query(query)
-            // TODO MLE .queryAndFetch()
-            .then(doc => {
-                doc.requestTimeSpentInMs = new Date() - beforeRequest;
-                return Promise.resolve(doc);
-            })
-            .catch(err => {
-                const doc = {};
-                doc.requestTimeSpentInMs = new Date() - beforeRequest;
-                // console.error(err);
-                return Promise.reject(err);
-            });
-    };
-
-    myModule.internal.$readNXQL = (nxql) => {
-
-        myModule.internal.init();
-
-        return myModule.internal.$readQuery({query: nxql, currentPageIndex: 0});
-    };
-
-    myModule.internal.$readOperation = (op, input) => {
-
-        myModule.internal.init();
-
-        const beforeRequest = new Date();
-
-        return myModule.internal.nuxeoClient
-            .operation(op)
-            .input(input)
-            .schemas(['dublincore', 'file'])
-            //   .params({
-            //     name: 'workspaces',
-            //   })
-            .execute()
-            //return myModule.internal.nuxeoClient
-            //   .repository()
-            //   .schemas(['dublincore', 'file'])
-            //   .automation({automation: automation, currentPageIndex: 0})
-            .then(doc => {
-                doc.requestTimeSpentInMs = new Date() - beforeRequest;
-                return Promise.resolve(doc);
-            })
-            .catch(err => {
-                const doc = {};
-                doc.requestTimeSpentInMs = new Date() - beforeRequest;
-                // console.error(err);
-                return Promise.reject(err);
-            });
-    };
-
-    myModule.internal.$updateOneDoc = (doc) => {
-
-        myModule.internal.init();
-
-        const beforeRequest = new Date();
-
-        if (!doc.properties['file:content']) {
-            console.log('bad file - skip it.', doc.properties['dc:title']);
-            return Promise.resolve(doc);
-        }
-
-        //console.log(doc.properties['file:content'].name);
-        doc.set({'dc:title': '' + doc.properties['file:content'].name + ' - ' + new Date().toLocaleString()});
-        return doc.save()
-            .then(doc => {
-                doc.requestTimeSpentInMs = new Date() - beforeRequest;
-                return Promise.resolve(doc);
-            });
-    };
-
-    myModule.internal.$createOneDoc = () => {
-
-        myModule.internal.init();
+        await myModule.internal.$init();
 
         const beforeRequest = new Date();
         let afterRequest = beforeRequest;
@@ -218,131 +128,226 @@ const nuxeoImport = (inTestMode) => {
 
     };
 
-    myModule.internal.$createDocs = (folderName, docCount) => {
 
-        myModule.internal.init();
+    myModule.internal.$createOneDoc = async (sourceId, folderName, fileIndex) => {
+
+        await myModule.internal.$init();
+
+        const fileDocument = myModule.internal.structureGetter(sourceId, folderName, fileIndex);
+
+        return myModule.internal.nuxeoClient
+            .repository()
+            .create(folderName, fileDocument, myModule.internal.nuxeoClientOption)
+            .then((doc) => {
+                //console.log('done ');
+                myModule.internal.importCount++;
+                return Promise.resolve(doc);
+            })
+            .catch((err) => {
+                myModule.internal.importErrorCount++;
+                console.error(`Err ${sourceId} - ${folderName} - ${fileIndex}:`, err.toString().substr(0, 200) + '...');
+            });
+
+    };
+
+    myModule.internal.$createDocs = async (folderName, docCount, sourceId) => {
+
+        await myModule.internal.$init();
         const now = new Date();
         let todos = [];
 
         for (let i = 0; i < docCount; i++) {
-
             const fileName = `test-${now.toISOString()}-${i}`;
-            const fileDocument = {
+            todos.push(myModule.internal.$createOneDoc(sourceId, folderName, i));
+        }
+
+        return Promise.all(todos);
+    };
+
+    myModule.internal.$lockFolder = async (folderName) => {
+
+        await myModule.internal.$init();
+        if (!myModule.internal.database) return Promise.reject('no db');
+
+        const collection = myModule.internal.database.collection('folders');
+
+        console.log(`Is Folder ${folderName} is still in progress ?`);
+        const doc = await collection.findOne({'uid': folderName});
+        if (doc && doc.finished) {
+            throw new Error(`Folder ${folderName} is in progress elsewhere`);
+        } else if (doc && !doc.finished) {
+            throw new Error(`Folder ${folderName} has been computed`);
+        } else {
+            console.log(`Folder ${folderName} will be computed`, doc);
+            await collection.insertOne({'uid': folderName, 'created': new Date(), 'finished': null});
+            console.log(`Folder ${folderName} 's computing`);
+        }
+    };
+
+
+    myModule.internal.$unlockFolder = async (folderName) => {
+
+        await myModule.internal.$init();
+        if (!myModule.internal.database) return Promise.reject('no db');
+
+        const collection = myModule.internal.database.collection('folders');
+        //console.log(`{'uid': ${folderName}, 'finished': {$ne: null}}`);
+        const {err, doc} = await collection.findOneAndUpdate(
+            {'uid': folderName, 'finished': {$eq: null}},
+            {$set: {'finished': new Date()}},
+            {});
+
+        if (err) {
+            throw new Error('Unlock err:' + err);
+        } else if (doc && doc.value && !doc.value.finished) {
+            throw new Error(`Folder ${folderName} has not been updated`);
+        }
+        return 1;//doc.value;
+    };
+
+    myModule.internal.$createFolderWithDocs = async (folderName, docCount, sourceId) => {
+
+        await myModule.internal.$init();
+
+        if (myModule.internal.importCountLimit < myModule.internal.importCount) {
+            return Promise.resolve();
+        }
+
+        try {
+            await myModule.internal.$lockFolder(sourceId);
+            const newFolder = {
                 'entity-type': 'document',
-                name: fileName,
-                type: 'File',
+                name: folderName,
+                type: 'Folder',
                 properties: {
-                    'dc:title': fileName
+                    'dc:title': folderName,
+                    'dc:source': sourceId
                 }
             };
 
-            const p = myModule.internal.nuxeoClient
-                .repository()
-                .create(folderName, fileDocument)
-                //.then((doc) => {
-                //    console.log('done ');
-                //})
-                .catch((err) => {
-                    console.log('r');
-                })
-            ;
-            todos.push(p);
-        }
-
-        return Promise.all(todos);
-    };
-
-    myModule.internal.$lockFolder = (folderName) => {
-
-        myModule.internal.init();
-        if (!myModule.internal.database) return Promise.reject('no db');
-
-        return new Promise((resolve, reject) => {
-            const collection = myModule.internal.database.collection('folders');
-            // Insert some documents
-            collection.insertMany([
-                {a: 1}, {a: 2}, {a: 3}
-            ], function (err, result) {
-                if (err) {
-                    reject(err);
-                } else {
-                    //assert.equal(err, null);
-                    //assert.equal(3, result.result.n);
-                    //assert.equal(3, result.ops.length);
-                    console.log("Inserted 3 documents into the collection");
-                    resolve(result);
-                }
-            });
-        });
-    };
-
-
-    myModule.internal.$unlockFolder = (folderName) => {
-
-        myModule.internal.init();
-        if (!myModule.internal.database) return Promise.reject('no db');
-
-        return new Promise((resolve, reject) => {
-            const collection = myModule.internal.database.collection('folders');
-            // Insert some documents
-            collection.insertMany([
-                {a: 1}, {a: 2}, {a: 3}
-            ], function (err, result) {
-                if (err) {
-                    reject(err);
-                } else {
-                    //assert.equal(err, null);
-                    //assert.equal(3, result.result.n);
-                    //assert.equal(3, result.ops.length);
-                    console.log("Inserted 3 documents into the collection");
-                    resolve(result);
-                }
-            });
-        });
-    };
-
-    myModule.internal.$createFolderWithDocs = (folderName, docCount) => {
-
-        myModule.internal.init();
-        const newFolder = {
-            'entity-type': 'document',
-            name: folderName,
-            type: 'Folder',
-            properties: {
-                'dc:title': folderName
+            let test = false;
+            if (test) {
+                await new Promise((resolve, reject) => {
+                    setTimeout(() => {
+                        resolve('test')
+                    }, 1000);
+                });
+            } else {
+                await myModule.internal.nuxeoClient
+                    .repository()
+                    .create(myModule.internal.defaultRepo, newFolder, myModule.internal.nuxeoClientOption)
+                    .then(function (doc) {
+                        return myModule.internal.$createDocs(myModule.internal.defaultRepo + folderName, docCount, sourceId);
+                    })
+                    .catch((err) => {
+                        console.err('folder error', err);
+                    });
             }
-        };
-        return myModule.internal.nuxeoClient
-            .repository()
-            .create(myModule.internal.defaultRepo, newFolder)
-            .then(function (doc) {
-                return myModule.internal.$createDocs(myModule.internal.defaultRepo + folderName, docCount);
-            })
-            .catch(function (error) {
-                console.error('$createFoldersWithDocs error', error);
-            });
+
+            await myModule.internal.$unlockFolder(sourceId);
+
+        } catch (e) {
+            console.log('$createFoldersWithDocs break, continue....', '' + e.toString().substr(0, 100) + '...', e);
+        }
     };
 
-    myModule.internal.$createFoldersWithDocs = (folderCount, docCount) => {
+    // test only
+    myModule.internal.$createFoldersWithDocs = async (folderCount, docCount) => {
 
-        myModule.internal.init();
-        const now = new Date();
-        let todos = [];
-        for (let i = 0; i < folderCount; i++) {
-            const folderName = `test-${now.toISOString()}-${i}`;
-            todos.push(myModule.internal.$createFolderWithDocs(folderName, docCount));
+        await myModule.internal.$init();
+        try {
+            //const now = new Date();
+            for (let i = 0; i < folderCount; i++) {
+                //const folderName = `test-${now.toISOString()}-${i}`;
+                const folderName = `folderz-${i}`;
+                await myModule.internal.$createFolderWithDocs(folderName, docCount, '123');
+            }
+        } catch (e) {
+            console.error('$createFoldersWithDocs error', e);
         }
-        return Promise.all(todos);
     };
 
-    myModule.public.createFolders = (remoteFolder, cdnList, options) => {
-        if (!remoteFolder || typeof remoteFolder !== 'string') {
-            throw new Error('First arg remoteFolder is required!')
+    myModule.internal.$createUsersFromEmailFile = async (sourceFilename) => {
+
+        await myModule.internal.$init();
+        let creationCount = 0;
+        try {
+            const data = await readFile(sourceFilename, 'utf8');
+            const lines = data.split('\n');
+            for (let i = 0; i < lines.length; i++) {
+
+                const addr = emailAddresses.parseOneAddress(lines[i]);
+                if (addr) {
+
+                    try {
+                        await myModule.internal.nuxeoClient.users().delete(addr.local + '.' + addr.domain);
+                    } catch (e) {
+                    }
+                    const newUser = {
+                        properties: {
+                            username: addr.local + '.' + addr.domain,
+                            company: addr.domain,
+                            email: addr.address,
+                            password: addr.local,
+                            groups: ["members"]
+                        }
+                    };
+                    await myModule.internal.nuxeoClient
+                        .users()
+                        .create(newUser);
+
+                    creationCount++;
+                }
+            }
+
+        } catch (e) {
+            console.error('$createUsersFromEmailFile error', e);
         }
 
+        return creationCount;
+    };
+
+    myModule.internal.$createFoldersWithDocsBasedOnSourceFile = async (sourceFilename) => {
+
+        await myModule.internal.$init();
+        let creationCount = 0;
+        try {
+            //const now = new Date();
+            const data = await readFile(sourceFilename, 'utf8');
+            const lines = data.split('\n');
+            let linesCount = lines.length;
+            let i = 0;
+            while (linesCount > 0) {
+                i = Math.floor(Math.random() * linesCount);
+                const folderName = `folder-${i}`;
+                await myModule.internal.$createFolderWithDocs(folderName, myModule.internal.nuxeoImportFolderCapacity, lines[i]);
+
+                lines.splice(i, 1);
+                linesCount--;
+                creationCount++;
+                //i++;
+            }
+
+        } catch (e) {
+            console.error('$createFoldersWithDocs error', e);
+        }
+
+        return creationCount;
+    };
+
+    myModule.internal.$createFoldersWithDocsBasedOnSourceFileInParallel = async (sourceFilename, count) => {
+
+        let parallel = [];
+        for (let i = 0; i < count; i++) {
+            parallel.push(myModule.internal.$createFoldersWithDocsBasedOnSourceFile(sourceFilename));
+        }
+        return Promise.all(parallel);
+    };
+
+    myModule.public.createFoldersDemo = () => {
         return through.obj((file, encoding, cb) => {
 
-                myModule.internal.$createFoldersWithDocs(1, 20)
+                myModule.internal.$createFoldersWithDocs(2, 20)
                     .then((docs) => {
 
                         //console.log('docs:', docs.entries.length);
@@ -355,7 +360,6 @@ const nuxeoImport = (inTestMode) => {
                     });
             },
             (cb) => {
-
                 //fs.writeFileSync(config.cache, JSON.stringify(config.cache_object, null, '  '));
                 //cb(failedFlag ? new Error('Some files corrupted during upload...') : null)
                 //cb(new Error(`Encoding ${encoding}`));
@@ -363,6 +367,57 @@ const nuxeoImport = (inTestMode) => {
 
             });
     };
+
+    myModule.public.createFoldersFromFile = (options) => {
+
+        console.log = () => {};
+
+        if (options && options.defaultRepo) {
+            myModule.internal.defaultRepo = options.defaultRepo;
+        }
+        if (options && options.structureGetter) {
+            myModule.internal.structureGetter = options.structureGetter;
+        }
+
+        return through.obj((file, encoding, cb) => {
+                myModule.internal.$createFoldersWithDocsBasedOnSourceFileInParallel(file.path, myModule.internal.nuxeoImportThreads)
+                    .then((creationCounts) => {
+                        console.warn('Folder creationCount:', myModule.internal.importCount, myModule.internal.importErrorCount, creationCounts);
+                        cb(null, file);
+                    })
+                    .catch((err) => {
+                        cb(err);
+                    });
+            },
+            (cb) => {
+                cb(null);
+            });
+    };
+
+
+    myModule.public.createUsersFromEmailFile = (options) => {
+        //if (!sourceFile || typeof sourceFile !== 'string') {
+        //    throw new Error('SourceFile is required!')
+        //}
+
+        return through.obj((file, encoding, cb) => {
+                myModule.internal.$createUsersFromEmailFile(file.path)
+                    .then((creationCount) => {
+
+                        //console.log('docs:', docs.entries.length);
+                        console.warn('User creationCount:', creationCount);
+
+                        cb(null, file);
+                    })
+                    .catch((err) => {
+                        cb(err);
+                    });
+            },
+            (cb) => {
+                cb(null);
+            });
+    };
+
 
     return myModule;
 };

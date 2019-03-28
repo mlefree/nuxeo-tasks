@@ -21,8 +21,12 @@
   },
   "homepage": "https://github.com/mlefree/nuxeo-tasks#readme",
   "dependencies": {
+    "dotenv": "^7.0.0",
+    "email-addresses": "^3.0.3",
     "gulp": "^4.0.0",
     "mongodb": "^3.2.2",
-    "nuxeo": "^3.11.0"
+    "nuxeo": "^3.11.0",
+    "random-sentence": "^1.0.4",
+    "uuid": "^3.3.2"
   }
 }

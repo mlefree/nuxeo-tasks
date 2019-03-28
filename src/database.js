@@ -15,16 +15,25 @@ const databaseModule = (inTestMode) => {
 
     myModule.public.$connect = () => {
 
-        myModule.internal.client = new MongoClient(myModule.internal.url);
+        if (!myModule.internal.client) {
+            myModule.internal.client = new MongoClient(myModule.internal.url);
+        }
+
+        if (myModule.public.db) {
+            console.log("Still Connected");
+            return Promise.resolve(myModule.public.db);
+        }
 
         return new Promise((resolve, reject) => {
             myModule.internal.client.connect((err) => {
                 if (err) {
                     reject(err);
+                } else if (myModule.public.db) {
+                    console.log("Still Connected...");
+                    resolve(myModule.public.db);
                 } else {
-                    console.log("Connected successfully to server : ", err);
-
-                    myModule.public.db = client.db(myModule.internal.dbName);
+                    console.log("Connected successfully to server.");
+                    myModule.public.db = myModule.internal.client.db(myModule.internal.dbName);
                     resolve(myModule.public.db);
                 }
             });
@@ -32,6 +41,10 @@ const databaseModule = (inTestMode) => {
     };
 
     myModule.public.$close = () => {
+        if (!myModule.internal.client) {
+            return Promise.resolve();
+        }
+
         return new Promise((resolve, reject) => {
             myModule.internal.client.close(false, (err) => {
                 if (err) {
