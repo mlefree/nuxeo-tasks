@@ -22,7 +22,7 @@ const nuxeoImport = (inTestMode) => {
     myModule.public = {};
 
     myModule.internal.importCount = 0;
-    myModule.internal.importCountLimit =  process.env.NUXEO_IMPORT_COUNT_LIMIT || 1000;
+    myModule.internal.importCountLimit =  parseInt(process.env.NUXEO_IMPORT_COUNT_LIMIT || "1000");
     myModule.internal.importErrorCount = 0;
     myModule.internal.nuxeoClient = null;
     myModule.internal.database = null;
