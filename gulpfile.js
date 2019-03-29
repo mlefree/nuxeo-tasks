@@ -1,8 +1,15 @@
-const {src, dest, parallel, series} = require('gulp');
+const {src, dest, task, parallel, series} = require('gulp');
 const {nuxeoImport} = require('./src/nuxeo-import');
+const {nuxeoRead} = require('./src/nuxeo-read');
 const randomSentence = require('random-sentence');
 require('dotenv').config();
 const uuidv4 = require('uuid/v4');
+
+
+function userImport() {
+    return src('./csv/email.toimport.*')
+        .pipe(nuxeoImport.createUsersFromEmailFile()) ;
+}
 
 function taskImport() {
 
@@ -38,20 +45,17 @@ function taskImport() {
     };
 
     return src('./csv/ids.toimport.*')
-    //TODO could be launch like it:
-     //.pipe(nuxeoImport.createFoldersFromFile())
-        .pipe(nuxeoImport.createFoldersFromFile(myOptions))
-    ;
+        .pipe(nuxeoImport.createFoldersFromFile(myOptions));
 }
 
-
-function userImport() {
-
-    return src('./csv/email.toimport.*')
-        .pipe(nuxeoImport.createUsersFromEmailFile())
-        ;
+function readRampUp() {
+    return src('./csv/email-ids.toimport.*')
+        .pipe(nuxeoRead.searchAsManyUsersForDocumentsAndReadThem()) ;
 }
 
-exports.taskImport = taskImport;
+exports.default = series(readRampUp);
 exports.userImport = userImport;
-exports.default = series(userImport, taskImport);
+exports.taskImport = taskImport;
+exports.readRampUp = readRampUp;
+exports.allImport = series(userImport, taskImport);
+exports.all = series(userImport, taskImport, readRampUp);

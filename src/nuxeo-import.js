@@ -22,7 +22,7 @@ const nuxeoImport = (inTestMode) => {
     myModule.public = {};
 
     myModule.internal.importCount = 0;
-    myModule.internal.importCountLimit = 400000;
+    myModule.internal.importCountLimit = 1000000;
     myModule.internal.importErrorCount = 0;
     myModule.internal.nuxeoClient = null;
     myModule.internal.database = null;
@@ -82,7 +82,7 @@ const nuxeoImport = (inTestMode) => {
         const beforeRequest = new Date();
         let afterRequest = beforeRequest;
         const now = new Date();
-        const filePath = path.join(__dirname, 'small.txt'); // todo big file ?
+        const filePath = path.join(__dirname, 'small.txt');
         // var file = fs.readFileSync(filePath, 'utf8');
         const file = fs.createReadStream(filePath);
         const blob = new Nuxeo.Blob({
@@ -161,7 +161,7 @@ const nuxeoImport = (inTestMode) => {
             todos.push(myModule.internal.$createOneDoc(sourceId, folderName, i));
         }
 
-        return Promise.all(todos);
+        return await Promise.all(todos);
     };
 
     myModule.internal.$lockFolder = async (folderName) => {
@@ -271,18 +271,20 @@ const nuxeoImport = (inTestMode) => {
 
         await myModule.internal.$init();
         let creationCount = 0;
-        try {
-            const data = await readFile(sourceFilename, 'utf8');
-            const lines = data.split('\n');
-            for (let i = 0; i < lines.length; i++) {
 
-                const addr = emailAddresses.parseOneAddress(lines[i]);
-                if (addr) {
+        const data = await readFile(sourceFilename, 'utf8');
+        const lines = data.split('\n');
+        for (let i = 0; i < lines.length; i++) {
 
-                    try {
-                        await myModule.internal.nuxeoClient.users().delete(addr.local + '.' + addr.domain);
-                    } catch (e) {
-                    }
+            const addr = emailAddresses.parseOneAddress(lines[i]);
+            if (addr) {
+
+                try {
+                    //await myModule.internal.nuxeoClient.users().delete(addr.local + '.' + addr.domain);
+                } catch (e) {
+                }
+
+                try {
                     const newUser = {
                         properties: {
                             username: addr.local + '.' + addr.domain,
@@ -297,11 +299,10 @@ const nuxeoImport = (inTestMode) => {
                         .create(newUser);
 
                     creationCount++;
+                } catch (error) {
+                    console.error('$createUsersFromEmailFile error', addr.address, '' + error.toString().substr(0, 200) + '...');
                 }
             }
-
-        } catch (e) {
-            console.error('$createUsersFromEmailFile error', e);
         }
 
         return creationCount;
@@ -370,7 +371,8 @@ const nuxeoImport = (inTestMode) => {
 
     myModule.public.createFoldersFromFile = (options) => {
 
-        console.log = () => {};
+        console.log = () => {
+        };
 
         if (options && options.defaultRepo) {
             myModule.internal.defaultRepo = options.defaultRepo;
