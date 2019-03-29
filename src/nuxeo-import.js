@@ -22,7 +22,7 @@ const nuxeoImport = (inTestMode) => {
     myModule.public = {};
 
     myModule.internal.importCount = 0;
-    myModule.internal.importCountLimit =  parseInt(process.env.NUXEO_IMPORT_COUNT_LIMIT || "1000");
+    myModule.internal.importCountLimit = parseInt(process.env.NUXEO_IMPORT_COUNT_LIMIT || "1000");
     myModule.internal.importErrorCount = 0;
     myModule.internal.nuxeoClient = null;
     myModule.internal.database = null;
@@ -240,7 +240,7 @@ const nuxeoImport = (inTestMode) => {
                         return myModule.internal.$createDocs(myModule.internal.defaultRepo + folderName, docCount, sourceId);
                     })
                     .catch((err) => {
-                        console.err('folder error', err);
+                        console.error(`Folder Err ${sourceId} - ${folderName} - ${docCount}:`, err.toString().substr(0, 200) + '...');
                     });
             }
 
@@ -257,10 +257,12 @@ const nuxeoImport = (inTestMode) => {
         await myModule.internal.$init();
         try {
             //const now = new Date();
-            for (let i = 0; i < folderCount; i++) {
+            const min = 100000000;
+            const max = min + folderCount;
+            for (let i = min; i < max; i++) {
                 //const folderName = `test-${now.toISOString()}-${i}`;
                 const folderName = `folderz-${i}`;
-                await myModule.internal.$createFolderWithDocs(folderName, docCount, '123');
+                await myModule.internal.$createFolderWithDocs(folderName, docCount, '' + i);
             }
         } catch (e) {
             console.error('$createFoldersWithDocs error', e);
@@ -336,6 +338,15 @@ const nuxeoImport = (inTestMode) => {
         return creationCount;
     };
 
+    myModule.internal.$createFoldersWithDocsInParallel = async (count) => {
+
+        let parallel = [];
+        for (let i = 0; i < count; i++) {
+            parallel.push(myModule.internal.$createFoldersWithDocs(myModule.internal.importCountLimit, myModule.internal.nuxeoImportFolderCapacity));
+        }
+        return Promise.all(parallel);
+    };
+
     myModule.internal.$createFoldersWithDocsBasedOnSourceFileInParallel = async (sourceFilename, count) => {
 
         let parallel = [];
@@ -345,15 +356,21 @@ const nuxeoImport = (inTestMode) => {
         return Promise.all(parallel);
     };
 
-    myModule.public.createFoldersDemo = () => {
+    myModule.public.createFoldersDemo = (options) => {
+
+        console.log = () => {
+        };
+        if (options && options.defaultRepo) {
+            myModule.internal.defaultRepo = options.defaultRepo;
+        }
+        if (options && options.structureGetter) {
+            myModule.internal.structureGetter = options.structureGetter;
+        }
+
         return through.obj((file, encoding, cb) => {
-
-                myModule.internal.$createFoldersWithDocs(2, 20)
-                    .then((docs) => {
-
-                        //console.log('docs:', docs.entries.length);
-                        console.log('docs:', docs.length);
-
+                myModule.internal.$createFoldersWithDocsInParallel(myModule.internal.nuxeoImportThreads)
+                    .then((creationCounts) => {
+                        console.warn('Folder Demo creationCount:', myModule.internal.importCount, myModule.internal.importErrorCount, creationCounts);
                         cb(null, file);
                     })
                     .catch((err) => {
@@ -361,9 +378,6 @@ const nuxeoImport = (inTestMode) => {
                     });
             },
             (cb) => {
-                //fs.writeFileSync(config.cache, JSON.stringify(config.cache_object, null, '  '));
-                //cb(failedFlag ? new Error('Some files corrupted during upload...') : null)
-                //cb(new Error(`Encoding ${encoding}`));
                 cb(null);
 
             });

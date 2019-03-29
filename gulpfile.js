@@ -1,8 +1,8 @@
 const {src, dest, task, parallel, series} = require('gulp');
+require('dotenv').config();
 const {nuxeoImport} = require('./src/nuxeo-import');
 const {nuxeoRead} = require('./src/nuxeo-read');
 const randomSentence = require('random-sentence');
-require('dotenv').config();
 const uuidv4 = require('uuid/v4');
 
 
@@ -45,7 +45,7 @@ function taskImport() {
     };
 
     return src('./csv/ids.toimport.*')
-        .pipe(nuxeoImport.createFoldersFromFile(myOptions));
+        .pipe(nuxeoImport.createFoldersDemo(myOptions));
 }
 
 function readRampUp() {
