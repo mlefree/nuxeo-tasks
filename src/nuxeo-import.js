@@ -269,19 +269,19 @@ const nuxeoImport = (inTestMode) => {
     };
 
     // test only
-    myModule.internal.$createFoldersWithDocs = async (folderCount, docCount) => {
+    myModule.internal.$createFoldersWithDocs = async (sourceIdMin, folderCount, docCount) => {
 
         await myModule.internal.$init();
         let results = [];
 
         //const now = new Date();
-        const min = parseInt(process.env.NUXEO_IMPORT_COUNT_MIN || "20000000000");
+        const min = sourceIdMin; //parseInt(process.env.NUXEO_IMPORT_COUNT_MIN || "20000000000");
         const max = min + folderCount;
         for (let i = min; i < max; i++) {
             //const folderName = `test-${now.toISOString()}-${i}`;
             const folderName = `folderz-${i}`;
             const result = await myModule.internal.$createFolderWithDocs(folderName, docCount, '' + i);
-            results.push(result);
+            //results.push(result);
         }
         return results;
     };
@@ -355,12 +355,13 @@ const nuxeoImport = (inTestMode) => {
         return creationCount;
     };
 
-    myModule.internal.$createFoldersWithDocsInSeries = async () => {
+    myModule.internal.$createFoldersWithDocsInParallel = async (count) => {
 
         let parallel = [];
-        //for (let i = 0; i < count; i++) {
-            parallel.push(myModule.internal.$createFoldersWithDocs(myModule.internal.importCountLimit, myModule.internal.nuxeoImportFolderCapacity));
-        //}
+        let min = parseInt(process.env.NUXEO_IMPORT_COUNT_MIN || "20000000000");
+        for (let i = 0; i < count; i++) {
+            parallel.push(myModule.internal.$createFoldersWithDocs(min + (myModule.internal.importCountLimit * i), myModule.internal.importCountLimit, myModule.internal.nuxeoImportFolderCapacity));
+        }
         return Promise.all(parallel);
     };
 
@@ -385,7 +386,7 @@ const nuxeoImport = (inTestMode) => {
         }
 
         return through.obj((file, encoding, cb) => {
-                myModule.internal.$createFoldersWithDocsInSeries()
+                myModule.internal.$createFoldersWithDocsInParallel(myModule.internal.nuxeoImportThreads)
                     .then((creationCounts) => {
                         console.warn('Folder Demo creationCount:', myModule.internal.importCount, myModule.internal.importErrorCount, creationCounts);
                         cb(null, file);
