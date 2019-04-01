@@ -46,6 +46,13 @@ const nuxeoRead = (inTestMode) => {
         //console.log('isAhead', b, t1, t2);
         return b;
     };
+    myModule.internal.willBeTooLate = (delayInMs) => {
+        const t1 = myModule.internal.readTimeLimit.getTime();
+        const t2 = new Date().getTime() + delayInMs;
+        const b = t1 < t2;
+        //console.log('willBeTooLate', b, t1, t2);
+        return b;
+    };
 
     myModule.internal.$init = async () => {
 
@@ -216,12 +223,23 @@ const nuxeoRead = (inTestMode) => {
 
         await myModule.internal.$initMultiple(clientId);
         let report = {
+            docCount: 0,
             requestCount: 0,
             averageTime: 0,
             averageTimePercentile95: 0,
             maxTime: 0,
             errorCount: 0
         };
+
+        try {
+            const count = await myModule.internal.$readQuery({
+                query: `SELECT * FROM Document WHERE ecm:primaryType = 'myNote' AND ecm:mixinType != HiddenInNavigation AND ecm:isProxy = 0 AND ecm:isVersion = 0 AND ecm:isTrashed = 0`
+            });
+            report.docCount = count.resultsCount;
+        } catch (error) {
+            console.error('$multipleSearchDocument error', error);
+        }
+
         let docs = null;
         try {
             //console.log('read query ', clientId);
@@ -272,9 +290,13 @@ const nuxeoRead = (inTestMode) => {
     };
 
 
-    myModule.internal.$multipleSearchDocumentWithDelay = async (clientId, folderId, category, delay) => {
+    myModule.internal.$multipleSearchDocumentWithDelay = async (clientId, folderId, category, delayInMs) => {
 
-        await timeout(delay);
+        if (myModule.internal.willBeTooLate(delayInMs)) {
+            return {};
+        }
+
+        await timeout(delayInMs);
 
         if (!myModule.internal.isAhead()) {
             return {};
@@ -309,7 +331,7 @@ const nuxeoRead = (inTestMode) => {
         if (options && options.readTimeLimit) {
             myModule.internal.readTimeLimit = options.readTimeLimit;
         } else {
-            myModule.internal.readTimeLimit.setSeconds(myModule.internal.readTimeLimit.getSeconds() + 72); //2h : 7200
+            myModule.internal.readTimeLimit.setSeconds(myModule.internal.readTimeLimit.getSeconds() + 72); //TODO 2h : 7200
         }
 
         return through.obj((file, encoding, cb) => {
