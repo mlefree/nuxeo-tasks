@@ -237,7 +237,7 @@ const nuxeoRead = (inTestMode) => {
             });
             report.docCount = count.resultsCount;
         } catch (error) {
-            console.error('$multipleSearchDocument error', error);
+            console.error('$multipleSearchDocument error1', error);
         }
 
         let docs = null;
@@ -250,7 +250,7 @@ const nuxeoRead = (inTestMode) => {
             report = myModule.internal.computeReport(report, docs);
         } catch (error) {
             report.errorCount++;
-            console.error('$multipleSearchDocument error', error);
+            console.error('$multipleSearchDocument error2', error);
         }
 
         console.log('docs.entries.length:', clientId, docs.entries.length, folderId, category);
@@ -282,7 +282,7 @@ const nuxeoRead = (inTestMode) => {
                 }
             } catch (error) {
                 report.errorCount++;
-                console.error('$multipleSearchDocument error', error);
+                console.error('$multipleSearchDocument error3', error);
             }
         }
 
@@ -328,6 +328,8 @@ const nuxeoRead = (inTestMode) => {
 
     myModule.public.searchAsManyUsersForDocumentsAndReadThem = (options) => {
 
+        console.log = () => {};
+
         if (options && options.readTimeLimit) {
             myModule.internal.readTimeLimit = options.readTimeLimit;
         } else {
@@ -337,7 +339,26 @@ const nuxeoRead = (inTestMode) => {
         return through.obj((file, encoding, cb) => {
                 myModule.internal.$searchAsManyUsersForDocumentsAndReadThem(file.path)
                     .then((readReports) => {
-                        console.warn('readReports:', readReports);
+                        const arrAvg = (arr) => {
+                            const reduce = arr.reduce((a,b) => {
+                                let c = a;
+                                for (let property in b) {
+                                    if (b.hasOwnProperty(property)) {
+                                        c[property] = (!a[property] ? 0 : a[property]) + b[property];
+                                    }
+                                }
+                                return c;
+                            }, {});
+
+                            for (let property in reduce) {
+                                if (reduce.hasOwnProperty(property)) {
+                                    reduce[property] = reduce[property] / arr.length;
+                                }
+                            }
+                            return  reduce;
+                        };
+
+                        console.warn('readReports:', arrAvg(readReports));
                         let stream = fs.createWriteStream(`report-searchAsManyUsersForDocumentsAndReadThem-${new Date().toISOString()}.gitignored.json`);
                         stream.once('open', () => {
                             stream.write(JSON.stringify(readReports));
