@@ -41,7 +41,7 @@ const nuxeoImport = (inTestMode) => {
     };
     // Perf tuning
     myModule.internal.nuxeoClientOption = {transactionTimeout: 1000, timeout: 1000, forever: true};
-    myModule.internal.nuxeoImportThreads = 4;
+    myModule.internal.nuxeoImportThreads = 5;
     myModule.internal.nuxeoImportFolderCapacity = 20;
 
     myModule.internal.$init = async () => {
