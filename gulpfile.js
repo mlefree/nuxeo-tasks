@@ -5,13 +5,6 @@ const {nuxeoRead} = require('./src/nuxeo-read');
 const randomSentence = require('random-sentence');
 const uuidv4 = require('uuid/v4');
 
-
-function userImport() {
-    return src('./csv/email.toimport.*')
-        .pipe(nuxeoImport.createUsersFromEmailFile()) ;
-}
-
-
 const myImportOptions = {
     defaultRepo: process.env.NUXEO_IMPORT_PATH,
     structureGetter: (folderId, folderName, fileIndex) => {
@@ -43,9 +36,17 @@ const myImportOptions = {
     }
 };
 
+const myReadOptions = {
+    readTimeLimitInSec: 7200
+};
+
+function userImport() {
+    return src('./csv/email.toimport.*')
+        .pipe(nuxeoImport.createUsersFromEmailFile());
+}
+
 function foldersDemoImport() {
-    return src('./csv/ids.toimport.*')
-        .pipe(nuxeoImport.createFoldersDemo(myImportOptions));
+    return parallel(nuxeoImport.createFoldersDemo(myImportOptions));
 }
 
 function foldersFromFileImport() {
@@ -53,15 +54,15 @@ function foldersFromFileImport() {
         .pipe(nuxeoImport.createFoldersFromFile(myImportOptions));
 }
 
-function readRampUp() {
+function readFromFileRampUp() {
     return src('./csv/email-ids.toimport.*')
-        .pipe(nuxeoRead.searchAsManyUsersForDocumentsAndReadThem()) ;
+        .pipe(nuxeoRead.searchAsManyUsersForDocumentsAndReadThem(myReadOptions));
 }
 
-exports.default = series(readRampUp);
+exports.default = series(readFromFileRampUp);
 exports.userImport = userImport;
 exports.foldersDemoImport = foldersDemoImport;
 exports.foldersFromFileImport = foldersFromFileImport;
-exports.readRampUp = readRampUp;
+exports.readFromFileRampUp = readFromFileRampUp;
 exports.allImport = series(userImport, foldersDemoImport);
-exports.all = series(userImport, foldersDemoImport, readRampUp);
+exports.all = series(userImport, foldersDemoImport, readFromFileRampUp);

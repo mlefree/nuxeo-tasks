@@ -5,6 +5,15 @@ const through = require('through2');
 const Nuxeo = require('nuxeo');
 const emailAddresses = require("email-addresses");
 
+function isEmpty(map) {
+    for (var key in map) {
+        if (map.hasOwnProperty(key)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 const readFile = (path, opts = 'utf8') => {
     return new Promise((resolve, reject) => {
         fs.readFile(path, opts, (err, data) => {
@@ -43,7 +52,7 @@ const nuxeoRead = (inTestMode) => {
         const t1 = myModule.internal.readTimeLimit.getTime();
         const t2 = new Date().getTime();
         const b = t1 > t2;
-        //console.log('isAhead', b, t1, t2);
+        //console.log('isAhead', b, myModule.internal.readTimeLimit.toISOString());
         return b;
     };
     myModule.internal.willBeTooLate = (delayInMs) => {
@@ -208,52 +217,71 @@ const nuxeoRead = (inTestMode) => {
             });
     };
 
-    myModule.internal.computeReport = (report, doc) => {
+    myModule.internal.updatedReport = (clientId, report, doc) => {
         let newReport = JSON.parse(JSON.stringify(report)); // copy values
+        if (isEmpty(newReport)) {
+            newReport = {
+                requestCount: 0,
+                averageTime: 0,
+                //averageTimePercentile95: 0,
+                maxTime: 0,
+                errorCount: 0
+            };
+        }
 
-        newReport.requestCount++;
-        newReport.averageTime = ((newReport.averageTime * (newReport.requestCount - 1)) + doc.requestTimeSpentInMs) / newReport.requestCount;
-        newReport.averageTimePercentile95 = newReport.averageTime; // complex to do - what about min and because request time looks very stable
-        newReport.maxTime = newReport.maxTime < doc.requestTimeSpentInMs ? doc.requestTimeSpentInMs : newReport.maxTime;
-        newReport.minTime = newReport.minTime < doc.requestTimeSpentInMs ? newReport.minTime : doc.requestTimeSpentInMs;
+        newReport.clientId = clientId;
+        if (!clientId) delete newReport.clientId;
+
+        if (doc.requestTimeSpentInMs) {
+            newReport.requestCount++;
+            newReport.averageTime = ((newReport.averageTime * (newReport.requestCount - 1)) + doc.requestTimeSpentInMs) / newReport.requestCount;
+            // newReport.averageTimePercentile95 = newReport.averageTime; // complex to do - what about min and because request time looks very stable
+            newReport.maxTime = newReport.maxTime < doc.requestTimeSpentInMs ? doc.requestTimeSpentInMs : newReport.maxTime;
+            newReport.minTime = newReport.minTime < doc.requestTimeSpentInMs ? newReport.minTime : doc.requestTimeSpentInMs;
+        } else {
+            const oldCount = newReport.requestCount;
+            newReport.requestCount = oldCount + doc.requestCount;
+            newReport.averageTime = ((newReport.averageTime * oldCount) + (doc.averageTime *doc.requestCount)) / newReport.requestCount;
+            // newReport.averageTimePercentile95 = newReport.averageTime; // complex to do - what about min and because request time looks very stable
+            newReport.maxTime = newReport.maxTime < doc.maxTime ? doc.maxTime : newReport.maxTime;
+            newReport.minTime = newReport.minTime < doc.minTime ? newReport.minTime : doc.minTime;
+        }
+
         return newReport;
+    };
+
+    myModule.internal.summarizedReports = (arr) => {
+        let count = 0;
+        const reduce = arr.reduce((a, b) => {
+            if (isEmpty(b)) return a;
+
+            return myModule.internal.updatedReport(null, a, b);
+        }, {});
+
+        return reduce;
     };
 
     myModule.internal.$multipleSearchDocument = async (clientId, folderId, category) => {
 
         await myModule.internal.$initMultiple(clientId);
-        let report = {
-            docCount: 0,
-            requestCount: 0,
-            averageTime: 0,
-            averageTimePercentile95: 0,
-            maxTime: 0,
-            errorCount: 0
-        };
-
-        try {
-            const count = await myModule.internal.$readQuery({
-                query: `SELECT * FROM Document WHERE ecm:primaryType = 'myNote' AND ecm:mixinType != HiddenInNavigation AND ecm:isProxy = 0 AND ecm:isVersion = 0 AND ecm:isTrashed = 0`
-            });
-            report.docCount = count.resultsCount;
-        } catch (error) {
-            console.error('$multipleSearchDocument error1', error);
-        }
-
+        let report = {};
         let docs = null;
         try {
-            //console.log('read query ', clientId);
+            console.log('launch query: ', myModule.internal.isAhead(), clientId);
             docs = await myModule.internal.$multipleReadQuery(clientId, {
                 query: `SELECT * FROM Document WHERE ecm:primaryType = 'myNote'  AND ecm:isTrashed = 0 AND csc:NumAVS = "${folderId}" AND csc:Categorie = "${category}"`, // "${folderId}" AND "${category}"
                 currentPageIndex: 0
             });
-            report = myModule.internal.computeReport(report, docs);
+            report = myModule.internal.updatedReport(clientId, report, docs);
         } catch (error) {
             report.errorCount++;
             console.error('$multipleSearchDocument error2', error);
         }
 
         console.log('docs.entries.length:', clientId, docs.entries.length, folderId, category);
+        if (docs.entries.length < 2) {
+            console.warn('Bad data: ', clientId, docs.entries.length, folderId, category);
+        }
         let firstTime = true;
         while (docs && docs.entries && docs.entries.length > 1 && myModule.internal.isAhead()) {
 
@@ -266,16 +294,16 @@ const nuxeoRead = (inTestMode) => {
 
             try {
                 const docToFind = docs.entries[parseInt(Math.random() * (docs.entries.length - 1))];
-                //console.log('docToFind:', clientId, docToFind.uid);
+                console.log('launch queries: ', myModule.internal.isAhead(), clientId);
                 const docsFound = await myModule.internal.$multipleReadQuery(clientId, {
                     query: `SELECT * FROM Document WHERE ecm:uuid = "${docToFind.uid}"`
                 });
 
                 if (docsFound.entries.length === 1 &&
-                    docsFound.entries[0].properties['csc:NumAVS'] === folderId &&
-                    docsFound.entries[0].properties['csc:Categorie'] === category) {
+                    docsFound.entries[0].properties['csc:NumAVS'] === '' + folderId &&
+                    docsFound.entries[0].properties['csc:Categorie'] === '' + category) {
                     //console.log('doc found ', clientId, docsFound.entries[0]);
-                    report = myModule.internal.computeReport(report, docsFound);
+                    report = myModule.internal.updatedReport(clientId, report, docsFound);
                 } else {
                     console.error('error on doc ', clientId, docToFind.uid, docsFound.resultsCount);
                     report.errorCount++;
@@ -315,53 +343,47 @@ const nuxeoRead = (inTestMode) => {
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i].split(',');
             const addr = emailAddresses.parseOneAddress(line[0]);
-            const folderId = line[1];
-            const category = line[2];
+            const folderId = parseInt(line[1]);
+            const category = parseInt(line[2]);
             if (addr && folderId && category) {
                 parallels.push(myModule.internal.$multipleSearchDocumentWithDelay(addr.address, folderId, category, i * 3500));
             }
         }
 
         const reports = await Promise.all(parallels);
-        return reports;
+        const report = {docCount: 0, entries: reports};
+
+        try {
+            const count = await myModule.internal.$readQuery({
+                query: `SELECT * FROM Document WHERE ecm:mixinType != HiddenInNavigation AND ecm:isProxy = 0 AND ecm:isVersion = 0 AND ecm:isTrashed = 0`
+            });
+            report.docCount = count.resultsCount;
+        } catch (error) {
+            console.error('$multipleSearchDocument error1', error);
+        }
+
+        return report;
     };
 
     myModule.public.searchAsManyUsersForDocumentsAndReadThem = (options) => {
 
         console.log = () => {};
 
-        if (options && options.readTimeLimit) {
-            myModule.internal.readTimeLimit = options.readTimeLimit;
+        if (options && options.readTimeLimitInSec) {
+            myModule.internal.readTimeLimit.setSeconds(myModule.internal.readTimeLimit.getSeconds() + options.readTimeLimitInSec);
         } else {
-            myModule.internal.readTimeLimit.setSeconds(myModule.internal.readTimeLimit.getSeconds() + 72); //TODO 2h : 7200
+            myModule.internal.readTimeLimit.setSeconds(myModule.internal.readTimeLimit.getSeconds() + 10);
         }
 
         return through.obj((file, encoding, cb) => {
                 myModule.internal.$searchAsManyUsersForDocumentsAndReadThem(file.path)
-                    .then((readReports) => {
-                        const arrAvg = (arr) => {
-                            const reduce = arr.reduce((a,b) => {
-                                let c = a;
-                                for (let property in b) {
-                                    if (b.hasOwnProperty(property)) {
-                                        c[property] = (!a[property] ? 0 : a[property]) + b[property];
-                                    }
-                                }
-                                return c;
-                            }, {});
+                    .then((readReport) => {
 
-                            for (let property in reduce) {
-                                if (reduce.hasOwnProperty(property)) {
-                                    reduce[property] = reduce[property] / arr.length;
-                                }
-                            }
-                            return  reduce;
-                        };
 
-                        console.warn('readReports:', arrAvg(readReports));
+                        console.warn('Final report, total of docs:', readReport.docCount, '\nrequests average:', myModule.internal.summarizedReports(readReport.entries));
                         let stream = fs.createWriteStream(`report-searchAsManyUsersForDocumentsAndReadThem-${new Date().toISOString()}.gitignored.json`);
                         stream.once('open', () => {
-                            stream.write(JSON.stringify(readReports));
+                            stream.write(JSON.stringify(readReport));
                             stream.end();
                         });
                         cb(null, file);
