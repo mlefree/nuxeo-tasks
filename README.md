@@ -20,6 +20,9 @@ gulp --tasks
 
 # if you need a simple demo folders
 nohup gulp foldersDemoImport --max-old-space-size=4096 > gulp.out 2>&1 &
+
+# or simulate readers
+nohup gulp readFromFileRampUp --max-old-space-size=4096 > gulp-read.out 2>&1 &
 # ...
 
 # if you need folders based on file ids

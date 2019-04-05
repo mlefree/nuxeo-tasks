@@ -242,7 +242,7 @@ const nuxeoRead = (inTestMode) => {
             const oldCount = newReport.requestCount;
             newReport.requestCount = oldCount + doc.requestCount;
             newReport.errorCount = newReport.errorCount + doc.errorCount;
-            newReport.averageTime = ((newReport.averageTime * oldCount) + (doc.averageTime *doc.requestCount)) / newReport.requestCount;
+            newReport.averageTime = ((newReport.averageTime * oldCount) + (doc.averageTime * doc.requestCount)) / newReport.requestCount;
             // newReport.averageTimePercentile95 = newReport.averageTime; // complex to do - what about min and because request time looks very stable
             newReport.maxTime = newReport.maxTime < doc.maxTime ? doc.maxTime : newReport.maxTime;
             newReport.minTime = newReport.minTime < doc.minTime ? newReport.minTime : doc.minTime;
@@ -276,7 +276,7 @@ const nuxeoRead = (inTestMode) => {
             report = myModule.internal.updatedReport(clientId, report, docs);
         } catch (error) {
             report.errorCount++;
-            console.error('$multipleSearchDocument error2', error);
+            console.error('$multipleSearchDocument error1', new Date().toISOString(), error);
         }
 
         console.log('docs.entries.length:', clientId, docs.entries.length, folderId, category);
@@ -306,12 +306,12 @@ const nuxeoRead = (inTestMode) => {
                     //console.log('doc found ', clientId, docsFound.entries[0]);
                     report = myModule.internal.updatedReport(clientId, report, docsFound);
                 } else {
-                    console.error('error on doc ', clientId, docToFind.uid, docsFound.resultsCount);
+                    console.error('error on doc ', new Date().toISOString(), clientId, docToFind.uid, docsFound.resultsCount);
                     report.errorCount++;
                 }
             } catch (error) {
                 report.errorCount++;
-                console.error('$multipleSearchDocument error3', error);
+                console.error('$multipleSearchDocument error1', new Date().toISOString(), error);
             }
         }
 
@@ -360,7 +360,7 @@ const nuxeoRead = (inTestMode) => {
             });
             report.docCount = count.resultsCount;
         } catch (error) {
-            console.error('$multipleSearchDocument error1', error);
+            console.error('$searchAsManyUsersForDocumentsAndReadThem error', new Date().toISOString(), error);
         }
 
         return report;
@@ -368,7 +368,8 @@ const nuxeoRead = (inTestMode) => {
 
     myModule.public.searchAsManyUsersForDocumentsAndReadThem = (options) => {
 
-        console.log = () => {};
+        console.log = () => {
+        };
 
         if (options && options.readTimeLimitInSec) {
             myModule.internal.readTimeLimit.setSeconds(myModule.internal.readTimeLimit.getSeconds() + options.readTimeLimitInSec);
