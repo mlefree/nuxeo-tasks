@@ -36,6 +36,7 @@ const nuxeoRead = (inTestMode) => {
     myModule.internal.nuxeoClient = null;
     myModule.internal.nuxeoClients = {};
     myModule.internal.database = null;
+    myModule.internal.brutInfoStream = null;
     //myModule.internal.defaultRepo = '/default-domain/workspaces/test-perf-node/';
     myModule.internal.testReadQuery = "SELECT * FROM Document"
         + " WHERE ecm:primaryType = 'myNote'"
@@ -55,6 +56,7 @@ const nuxeoRead = (inTestMode) => {
         //console.log('isAhead', b, myModule.internal.readTimeLimit.toISOString());
         return b;
     };
+
     myModule.internal.willBeTooLate = (delayInMs) => {
         const t1 = myModule.internal.readTimeLimit.getTime();
         const t2 = new Date().getTime() + delayInMs;
@@ -132,54 +134,6 @@ const nuxeoRead = (inTestMode) => {
             });
     };
 
-    myModule.internal.$readQuery = async (query) => {
-
-        await myModule.internal.$init();
-
-        const beforeRequest = new Date();
-
-        return myModule.internal.nuxeoClient
-            .repository()
-            //.schemas(['dublincore', 'file'])
-            .enricher('document', 'thumbnail')
-            .query(query)
-            // TODO MLE .queryAndFetch()
-            .then(doc => {
-                doc.requestTimeSpentInMs = new Date() - beforeRequest;
-                return Promise.resolve(doc);
-            })
-            .catch(err => {
-                const doc = {};
-                doc.requestTimeSpentInMs = new Date() - beforeRequest;
-                // console.error(err);
-                return Promise.reject(err);
-            });
-    };
-
-    myModule.internal.$multipleReadQuery = async (clientId, query) => {
-
-        await myModule.internal.$initMultiple(clientId);
-
-        const beforeRequest = new Date();
-
-        return myModule.internal.nuxeoClients[clientId]
-            .repository()
-            .schemas(['dublincore', 'file', 'csc'])
-            //.enricher('document', 'thumbnail')
-            .query(query)
-            .then(doc => {
-                doc.requestTimeSpentInMs = new Date() - beforeRequest;
-                //console.log('found : ', doc);
-                return Promise.resolve(doc);
-            })
-            .catch(err => {
-                const doc = {};
-                doc.requestTimeSpentInMs = new Date() - beforeRequest;
-                // console.error(err);
-                return Promise.reject(err);
-            });
-    };
-
     myModule.internal.$readNXQL = async (nxql) => {
 
         await myModule.internal.$init();
@@ -217,16 +171,37 @@ const nuxeoRead = (inTestMode) => {
             });
     };
 
+    myModule.internal.$readQuery = async (query) => {
+
+        await myModule.internal.$init();
+
+        const beforeRequest = new Date();
+
+        return myModule.internal.nuxeoClient
+            .repository()
+            //.schemas(['dublincore', 'file'])
+            .enricher('document', 'thumbnail')
+            .query(query)
+            // TODO MLE .queryAndFetch()
+            .then(doc => {
+                doc.requestTimeSpentInMs = new Date() - beforeRequest;
+                return Promise.resolve(doc);
+            })
+            .catch(err => {
+                const doc = {};
+                doc.requestTimeSpentInMs = new Date() - beforeRequest;
+                // console.error(err);
+                return Promise.reject(err);
+            });
+    };
+
     myModule.internal.updatedReport = (clientId, report, doc) => {
-        let newReport = JSON.parse(JSON.stringify(report)); // copy values
+        let newReport = report; //JSON.parse(JSON.stringify(report)); // copy values
         if (isEmpty(newReport)) {
-            newReport = {
-                requestCount: 0,
-                averageTime: 0,
-                //averageTimePercentile95: 0,
-                maxTime: 0,
-                errorCount: 0
-            };
+            newReport.requestCount = 0;
+            newReport.averageTime = 0;
+            newReport.maxTime = 0;
+            newReport.errorCount = 0;
         }
 
         newReport.clientId = clientId;
@@ -252,7 +227,6 @@ const nuxeoRead = (inTestMode) => {
     };
 
     myModule.internal.summarizedReports = (arr) => {
-        let count = 0;
         const reduce = arr.reduce((a, b) => {
             if (isEmpty(b)) return a;
 
@@ -262,11 +236,37 @@ const nuxeoRead = (inTestMode) => {
         return reduce;
     };
 
-    myModule.internal.$multipleSearchDocument = async (clientId, folderId, category) => {
+    myModule.internal.$multipleReadQuery = async (clientId, query) => {
 
         await myModule.internal.$initMultiple(clientId);
-        let report = {};
-        let docs = null;
+
+        const beforeRequest = new Date();
+
+        return myModule.internal.nuxeoClients[clientId]
+            .repository()
+            .schemas(['dublincore', 'file', 'csc'])
+            //.enricher('document', 'thumbnail')
+            .query(query)
+            .then(doc => {
+                const afterRequest = new Date();
+                doc.requestTimeSpentInMs = afterRequest - beforeRequest;
+                //console.log('found : ', doc);
+                if (myModule.internal.brutInfoStream && myModule.internal.brutInfoStream.write) {
+                    myModule.internal.brutInfoStream.write('' + clientId + ',' + query.query + ',' + beforeRequest.toISOString() + ',' + afterRequest.toISOString() + ',' + doc.requestTimeSpentInMs + '\r\n');
+                }
+                return Promise.resolve(doc);
+            })
+            .catch(err => {
+                const doc = {};
+                doc.requestTimeSpentInMs = new Date() - beforeRequest;
+                // console.error(err);
+                return Promise.reject(err);
+            });
+    };
+
+    myModule.internal.$multipleSearchDocumentList = async (clientId, folderId, category, report) => {
+
+        let docs = {entries: []};
         try {
             console.log('launch query: ', myModule.internal.isAhead(), clientId);
             docs = await myModule.internal.$multipleReadQuery(clientId, {
@@ -275,51 +275,72 @@ const nuxeoRead = (inTestMode) => {
             });
             report = myModule.internal.updatedReport(clientId, report, docs);
         } catch (error) {
+            if (!report.errorCount) {
+                report.errorCount = 0;
+            }
+            report.errorCount++;
+            console.error('$multipleSearchDocument error1', new Date().toISOString(), error);
+        }
+        return docs;
+    };
+
+    myModule.internal.$multipleSearchDocument = async (clientId, folderId, category, docToFind, report) => {
+
+        console.log('launch queries: ', myModule.internal.isAhead(), clientId);
+        try {
+            const docsFound = await myModule.internal.$multipleReadQuery(clientId, {
+                query: `SELECT * FROM Document WHERE ecm:uuid = "${docToFind.uid}"`
+            });
+
+            if (docsFound.entries.length === 1 &&
+                docsFound.entries[0].properties['csc:NumAVS'] === '' + folderId &&
+                docsFound.entries[0].properties['csc:Categorie'] === '' + category) {
+                //console.log('doc found ', clientId, docsFound.entries[0]);
+                report = myModule.internal.updatedReport(clientId, report, docsFound);
+            } else {
+                console.error('error on doc ', new Date().toISOString(), clientId, docToFind.uid, docsFound.resultsCount);
+                report.errorCount++;
+            }
+        } catch (error) {
+            if (!report.errorCount) {
+                report.errorCount = 0;
+            }
             report.errorCount++;
             console.error('$multipleSearchDocument error1', new Date().toISOString(), error);
         }
 
-        console.log('docs.entries.length:', clientId, docs.entries.length, folderId, category);
-        if (docs.entries.length < 2) {
-            console.warn('Bad data: ', clientId, docs.entries.length, folderId, category);
-        }
-        let firstTime = true;
-        while (docs && docs.entries && docs.entries.length > 1 && myModule.internal.isAhead()) {
+        return report;
+    };
 
-            if (firstTime) {
-                await timeout(2000);
-                firstTime = false;
+    myModule.internal.$multipleSearchDocuments = async (clientId, folderId, category) => {
+
+        let report = {};
+        await myModule.internal.$initMultiple(clientId);
+
+        while (myModule.internal.isAhead()) {
+
+            let docs = await myModule.internal.$multipleSearchDocumentList(clientId, folderId, category, report);
+            console.log('docs.entries.length:', clientId, docs.entries.length, folderId, category);
+
+            if (!docs || !docs.entries || docs.entries.length < 2) {
+                console.warn('Bad data: ', clientId, docs.entries.length, folderId, category);
             } else {
+                await timeout(2000);
+                let docToFind = docs.entries[parseInt(Math.random() * (docs.entries.length - 1))];
+                await myModule.internal.$multipleSearchDocument(clientId, folderId, category, docToFind, report);
+
                 await timeout(20000);
-            }
+                docToFind = docs.entries[parseInt(Math.random() * (docs.entries.length - 1))];
+                await myModule.internal.$multipleSearchDocument(clientId, folderId, category, docToFind, report);
 
-            try {
-                const docToFind = docs.entries[parseInt(Math.random() * (docs.entries.length - 1))];
-                console.log('launch queries: ', myModule.internal.isAhead(), clientId);
-                const docsFound = await myModule.internal.$multipleReadQuery(clientId, {
-                    query: `SELECT * FROM Document WHERE ecm:uuid = "${docToFind.uid}"`
-                });
-
-                if (docsFound.entries.length === 1 &&
-                    docsFound.entries[0].properties['csc:NumAVS'] === '' + folderId &&
-                    docsFound.entries[0].properties['csc:Categorie'] === '' + category) {
-                    //console.log('doc found ', clientId, docsFound.entries[0]);
-                    report = myModule.internal.updatedReport(clientId, report, docsFound);
-                } else {
-                    console.error('error on doc ', new Date().toISOString(), clientId, docToFind.uid, docsFound.resultsCount);
-                    report.errorCount++;
-                }
-            } catch (error) {
-                report.errorCount++;
-                console.error('$multipleSearchDocument error1', new Date().toISOString(), error);
+                await timeout(20000);
             }
         }
 
         return report;
     };
 
-
-    myModule.internal.$multipleSearchDocumentWithDelay = async (clientId, folderId, category, delayInMs) => {
+    myModule.internal.$multipleSearchDocumentsWithDelay = async (clientId, folderId, category, delayInMs) => {
 
         if (myModule.internal.willBeTooLate(delayInMs)) {
             return {};
@@ -331,10 +352,10 @@ const nuxeoRead = (inTestMode) => {
             return {};
         }
 
-        const report = await myModule.internal.$multipleSearchDocument(clientId, folderId, category);
+        const report = await myModule.internal.$multipleSearchDocuments(clientId, folderId, category);
+
         return report;
     };
-
 
     myModule.internal.$searchAsManyUsersForDocumentsAndReadThem = async (sourceFilename) => {
 
@@ -347,10 +368,9 @@ const nuxeoRead = (inTestMode) => {
             const folderId = parseInt(line[1]);
             const category = parseInt(line[2]);
             if (addr && folderId && category) {
-                parallels.push(myModule.internal.$multipleSearchDocumentWithDelay(addr.address, folderId, category, i * 3500));
+                parallels.push(myModule.internal.$multipleSearchDocumentsWithDelay(addr.address, folderId, category, i * 3500));
             }
         }
-
         const reports = await Promise.all(parallels);
         const report = {docCount: 0, entries: reports};
 
@@ -368,8 +388,8 @@ const nuxeoRead = (inTestMode) => {
 
     myModule.public.searchAsManyUsersForDocumentsAndReadThem = (options) => {
 
-        console.log = () => {
-        };
+        //console.log = () => {
+        //};
 
         if (options && options.readTimeLimitInSec) {
             myModule.internal.readTimeLimit.setSeconds(myModule.internal.readTimeLimit.getSeconds() + options.readTimeLimitInSec);
@@ -377,28 +397,35 @@ const nuxeoRead = (inTestMode) => {
             myModule.internal.readTimeLimit.setSeconds(myModule.internal.readTimeLimit.getSeconds() + 10);
         }
 
+        const jobDate = new Date();
+
         return through.obj((file, encoding, cb) => {
-                myModule.internal.$searchAsManyUsersForDocumentsAndReadThem(file.path)
-                    .then((readReport) => {
+                let brutInfoStream = fs.createWriteStream(`report-searchAsManyUsersForDocumentsAndReadThem-${jobDate.toISOString()}.gitignored.csv`);
+                brutInfoStream.once('open', () => {
 
+                    myModule.internal.brutInfoStream = brutInfoStream;
+                    myModule.internal.$searchAsManyUsersForDocumentsAndReadThem(file.path)
+                        .then((readReport) => {
+                            console.warn('Final report, total of docs:', readReport.docCount, '\nrequests average:', myModule.internal.summarizedReports(readReport.entries));
 
-                        console.warn('Final report, total of docs:', readReport.docCount, '\nrequests average:', myModule.internal.summarizedReports(readReport.entries));
-                        let stream = fs.createWriteStream(`report-searchAsManyUsersForDocumentsAndReadThem-${new Date().toISOString()}.gitignored.json`);
-                        stream.once('open', () => {
-                            stream.write(JSON.stringify(readReport));
-                            stream.end();
+                            brutInfoStream.end();
+                            let reportFile = fs.createWriteStream(`report-searchAsManyUsersForDocumentsAndReadThem-${jobDate.toISOString()}.gitignored.json`);
+                            reportFile.once('open', () => {
+                                reportFile.write(JSON.stringify(readReport));
+                                reportFile.end();
+                            });
+                            cb(null, file);
+                        })
+                        .catch((err) => {
+                            brutInfoStream.end();
+                            cb(err);
                         });
-                        cb(null, file);
-                    })
-                    .catch((err) => {
-                        cb(err);
-                    });
+                });
             },
             (cb) => {
                 cb(null);
             });
     };
-
 
     return myModule;
 };

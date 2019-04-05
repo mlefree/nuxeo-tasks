@@ -1,5 +1,5 @@
+const dotenv = require('dotenv').config();
 const {src, dest, task, parallel, series} = require('gulp');
-require('dotenv').config();
 const {nuxeoImport} = require('./src/nuxeo-import');
 const {nuxeoRead} = require('./src/nuxeo-read');
 const randomSentence = require('random-sentence');
@@ -37,7 +37,7 @@ const myImportOptions = {
 };
 
 const myReadOptions = {
-    readTimeLimitInSec: 7200
+    readTimeLimitInSec: 60 // 7200 = 2h
 };
 
 function userImport() {
@@ -59,10 +59,11 @@ function readFromFileRampUp() {
         .pipe(nuxeoRead.searchAsManyUsersForDocumentsAndReadThem(myReadOptions));
 }
 
-exports.default = series(readFromFileRampUp);
+// Tasks :
 exports.userImport = userImport;
 exports.foldersDemoImport = foldersDemoImport;
 exports.foldersFromFileImport = foldersFromFileImport;
 exports.readFromFileRampUp = readFromFileRampUp;
 exports.allImport = series(userImport, foldersDemoImport);
 exports.all = series(userImport, foldersDemoImport, readFromFileRampUp);
+exports.default = series(readFromFileRampUp);
