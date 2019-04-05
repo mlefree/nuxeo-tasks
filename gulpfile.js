@@ -37,7 +37,7 @@ const myImportOptions = {
 };
 
 const myReadOptions = {
-    readTimeLimitInSec: 60 // 7200 = 2h
+    readTimeLimitInSec: 7200 // 7200 = 2h
 };
 
 function userImport() {
