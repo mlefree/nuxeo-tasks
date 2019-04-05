@@ -241,6 +241,7 @@ const nuxeoRead = (inTestMode) => {
         } else {
             const oldCount = newReport.requestCount;
             newReport.requestCount = oldCount + doc.requestCount;
+            newReport.errorCount = newReport.errorCount + doc.errorCount;
             newReport.averageTime = ((newReport.averageTime * oldCount) + (doc.averageTime *doc.requestCount)) / newReport.requestCount;
             // newReport.averageTimePercentile95 = newReport.averageTime; // complex to do - what about min and because request time looks very stable
             newReport.maxTime = newReport.maxTime < doc.maxTime ? doc.maxTime : newReport.maxTime;
