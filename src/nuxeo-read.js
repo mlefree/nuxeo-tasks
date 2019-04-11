@@ -358,6 +358,12 @@ const nuxeoRead = (inTestMode) => {
                 docsFound.entries.length === 1 &&
                 docsFound.entries[0].title === title) {
                 report = myModule.internal.updatedReport('Admin', report, docsFound);
+
+                // download blob
+                const beforeDownload = new Date();
+                await docsFound.entries[0].fetchBlob();
+                report.fetchBlobTime = new Date() - beforeDownload;
+
             } else {
                 report.errorCount = 1;
             }
