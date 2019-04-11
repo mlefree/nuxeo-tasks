@@ -34,7 +34,8 @@ nohup docker-compose up mongo > docker-compose.out 2>&1 &
 
 ## Todo
 
-- **TODO** config ready
+- **TODO** extend configuration
+- **TODO** add tasks
 
 
 ## Contributors

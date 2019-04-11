@@ -5,6 +5,7 @@ const {nuxeoRead} = require('./src/nuxeo-read');
 const randomSentence = require('random-sentence');
 const uuidv4 = require('uuid/v4');
 
+// todo : set special config into /extra directory, and set them if present
 const myImportOptions = {
     defaultRepo: process.env.NUXEO_IMPORT_PATH,
     structureGetter: (folderId, folderName, fileIndex) => {
@@ -55,8 +56,13 @@ function foldersFromFileImport() {
 }
 
 function readFromFileRampUp() {
-    return src('./csv/email-ids.toimport.*')
+    return src('./csv/email-ids.toread.*')
         .pipe(nuxeoRead.searchAsManyUsersForDocumentsAndReadThem(myReadOptions));
+}
+
+function readDocumentsFromFile() {
+    return src('./csv/docs.toread.*')
+        .pipe(nuxeoRead.searchForDocumentsAndReadThem(myReadOptions));
 }
 
 // Tasks :
@@ -64,6 +70,7 @@ exports.userImport = userImport;
 exports.foldersDemoImport = foldersDemoImport;
 exports.foldersFromFileImport = foldersFromFileImport;
 exports.readFromFileRampUp = readFromFileRampUp;
+exports.readDocumentsFromFile = readDocumentsFromFile;
 exports.allImport = series(userImport, foldersDemoImport);
 exports.all = series(userImport, foldersDemoImport, readFromFileRampUp);
 exports.default = series(readFromFileRampUp);

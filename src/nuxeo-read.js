@@ -184,7 +184,11 @@ const nuxeoRead = (inTestMode) => {
             .query(query)
             // TODO MLE .queryAndFetch()
             .then(doc => {
-                doc.requestTimeSpentInMs = new Date() - beforeRequest;
+                const afterRequest = new Date();
+                doc.requestTimeSpentInMs = afterRequest - beforeRequest;
+                if (myModule.internal.brutInfoStream && myModule.internal.brutInfoStream.write) {
+                    myModule.internal.brutInfoStream.write('Admin' + ',' + query.query + ',' + beforeRequest.toISOString() + ',' + afterRequest.toISOString() + ',' + doc.requestTimeSpentInMs + '\r\n');
+                }
                 return Promise.resolve(doc);
             })
             .catch(err => {
@@ -340,6 +344,31 @@ const nuxeoRead = (inTestMode) => {
         return report;
     };
 
+    myModule.internal.$searchDocumentWithTitle = async (title) => {
+
+        let report = {};
+        await myModule.internal.$init();
+
+        try {
+            const docsFound = await myModule.internal.$readQuery({
+                query: `SELECT * FROM Document WHERE dc:title = "${title}"`
+            });
+            if (docsFound &&
+                docsFound.entries &&
+                docsFound.entries.length === 1 &&
+                docsFound.entries[0].title === title) {
+                report = myModule.internal.updatedReport('Admin', report, docsFound);
+            } else {
+                report.errorCount = 1;
+            }
+        } catch (error) {
+            report.errorCount = 1;
+            console.error('$searchDocumentWithTitle error', new Date().toISOString(), error);
+        }
+
+        return report;
+    };
+
     myModule.internal.$multipleSearchDocumentsWithDelay = async (clientId, folderId, category, delayInMs) => {
 
         if (myModule.internal.willBeTooLate(delayInMs)) {
@@ -354,6 +383,13 @@ const nuxeoRead = (inTestMode) => {
 
         const report = await myModule.internal.$multipleSearchDocuments(clientId, folderId, category);
 
+        return report;
+    };
+
+    myModule.internal.$searchDocumentWithTitleAndDelay = async (title, delayInMs) => {
+
+        await timeout(delayInMs);
+        const report = await myModule.internal.$searchDocumentWithTitle(title);
         return report;
     };
 
@@ -386,10 +422,25 @@ const nuxeoRead = (inTestMode) => {
         return report;
     };
 
+    myModule.internal.$searchForDocumentsAndReadThem = async (sourceFilename) => {
+
+        const data = await readFile(sourceFilename, 'utf8');
+        const lines = data.split('\n');
+        let parallels = [];
+        for (let i = 0; i < lines.length; i++) {
+            const title = lines[i];
+            if (title) {
+                parallels.push(myModule.internal.$searchDocumentWithTitleAndDelay(title, i * 3500));
+            }
+        }
+        const reports = await Promise.all(parallels);
+        return reports;
+    };
+
     myModule.public.searchAsManyUsersForDocumentsAndReadThem = (options) => {
 
-        //console.log = () => {
-        //};
+        console.log = () => {
+        };
 
         if (options && options.readTimeLimitInSec) {
             myModule.internal.readTimeLimit.setSeconds(myModule.internal.readTimeLimit.getSeconds() + options.readTimeLimitInSec);
@@ -410,6 +461,41 @@ const nuxeoRead = (inTestMode) => {
 
                             brutInfoStream.end();
                             let reportFile = fs.createWriteStream(`report-searchAsManyUsersForDocumentsAndReadThem-${jobDate.toISOString()}.gitignored.json`);
+                            reportFile.once('open', () => {
+                                reportFile.write(JSON.stringify(readReport));
+                                reportFile.end();
+                            });
+                            cb(null, file);
+                        })
+                        .catch((err) => {
+                            brutInfoStream.end();
+                            cb(err);
+                        });
+                });
+            },
+            (cb) => {
+                cb(null);
+            });
+    };
+
+    myModule.public.searchForDocumentsAndReadThem = (options) => {
+
+        console.log = () => {
+        };
+
+        const jobDate = new Date();
+
+        return through.obj((file, encoding, cb) => {
+                let brutInfoStream = fs.createWriteStream(`report-searchForDocumentsAndReadThem-${jobDate.toISOString()}.gitignored.csv`);
+                brutInfoStream.once('open', () => {
+
+                    myModule.internal.brutInfoStream = brutInfoStream;
+                    myModule.internal.$searchForDocumentsAndReadThem(file.path)
+                        .then((readReport) => {
+                            console.warn('Final report, total of docs:', readReport.length);
+
+                            brutInfoStream.end();
+                            let reportFile = fs.createWriteStream(`report-searchForDocumentsAndReadThem-${jobDate.toISOString()}.gitignored.json`);
                             reportFile.once('open', () => {
                                 reportFile.write(JSON.stringify(readReport));
                                 reportFile.end();
