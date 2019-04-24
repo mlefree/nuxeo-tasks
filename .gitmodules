@@ -1,0 +1,6 @@
+[submodule "nuxeo-workflow-test"]
+	path = nuxeo-workflow-test
+	url = https://github.com/nuxeo-sandbox/nuxeo-workflow-test
+[submodule "home-loan-processing-demo-data-generator"]
+	path = home-loan-processing-demo-data-generator
+	url = https://github.com/nuxeo-sandbox/home-loan-processing-demo-data-generator

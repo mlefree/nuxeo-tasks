@@ -361,9 +361,14 @@ const nuxeoRead = (inTestMode) => {
 
                 // download blob
                 const beforeDownload = new Date();
-                await docsFound.entries[0].fetchBlob();
-                report.fetchBlobTime = new Date() - beforeDownload;
-
+                const resBlob = await docsFound.entries[0].fetchBlob();
+                const blob = await resBlob.blob();
+                if (blob) {
+                    report.fetchBlobTime = new Date() - beforeDownload;
+                    console.log('report.fetchBlobTime:', report.fetchBlobTime, blob);
+                } else {
+                    report.errorCount = 1;
+                }
             } else {
                 report.errorCount = 1;
             }
