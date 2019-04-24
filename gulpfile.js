@@ -2,8 +2,7 @@ const dotenv = require('dotenv').config();
 const {src, dest, task, parallel, series} = require('gulp');
 const {nuxeoImport} = require('./src/nuxeo-import');
 const {nuxeoRead} = require('./src/nuxeo-read');
-// todo workflow tasks using :
-const workflowTest = require('nuxeo-workflow-test/index');
+// todo workflow tasks using : const workflowTest = require('nuxeo-workflow-test/index');
 
 // Extra configs :
 let myImportOptions = {};
@@ -16,7 +15,7 @@ try {
 } catch(e) {}
 
 function userImport() {
-    return src('./csv/email.toimport.*')
+    return src('./inputs/email.toimport.*')
         .pipe(nuxeoImport.createUsersFromEmailFile());
 }
 
@@ -25,17 +24,17 @@ function foldersDemoImport() {
 }
 
 function foldersFromFileImport() {
-    return src('./csv/ids.toimport.*')
+    return src('./inputs/ids.toimport.*')
         .pipe(nuxeoImport.createFoldersFromFile(myImportOptions));
 }
 
 function readFromFileRampUp() {
-    return src('./csv/email-ids.toread.*')
+    return src('./inputs/email-ids.toread.*')
         .pipe(nuxeoRead.searchAsManyUsersForDocumentsAndReadThem(myReadOptions));
 }
 
 function readDocumentsFromFile() {
-    return src('./csv/docs.toread.*')
+    return src('./inputs/docs.toread.*')
         .pipe(nuxeoRead.searchForDocumentsAndReadThem(myReadOptions));
 }
 

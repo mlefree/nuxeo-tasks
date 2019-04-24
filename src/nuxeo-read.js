@@ -246,6 +246,7 @@ const nuxeoRead = (inTestMode) => {
 
         const beforeRequest = new Date();
 
+        // TODO remove csc schema
         return myModule.internal.nuxeoClients[clientId]
             .repository()
             .schemas(['dublincore', 'file', 'csc'])
