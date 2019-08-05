@@ -22,12 +22,23 @@ const nuxeoImport = (inTestMode) => {
     myModule.public = {};
 
     myModule.internal.importCount = 0;
-    myModule.internal.importCountLimit = parseInt(process.env.NUXEO_IMPORT_COUNT_LIMIT || "1000");
     myModule.internal.importErrorCount = 0;
     myModule.internal.nuxeoClient = null;
     myModule.internal.database = null;
-    myModule.internal.defaultRepo = '/default-domain/workspaces/test-perf-node/';
-    myModule.internal.structureGetter = (id, folderId, folderCount) => {
+
+    myModule.internal.defaultRepo = '/default-domain/workspaces/test-import-node';
+    myModule.internal.defaultConfiguration = {
+        prepareWorkspace: true,
+        importNeedToBeSafe: false,
+        importCountMin: 20,
+        importCountLimit: 450,
+        recursiveLevel: 3,
+        recursiveCount: 3,
+        nuxeoClientOption: {transactionTimeout: 1000, timeout: 1000, forever: true},
+        nuxeoImportThreads: 5,
+        nuxeoImportFolderCapacityLimit: 20
+    };
+    myModule.internal.defaultStructureGetter = (level, folderId, folderCount) => {
         const filename = 'file-' + folderId + '-' + folderCount;
         return {
             'entity-type': 'document',
@@ -39,10 +50,6 @@ const nuxeoImport = (inTestMode) => {
             }
         };
     };
-    // Perf tuning
-    myModule.internal.nuxeoClientOption = {transactionTimeout: 1000, timeout: 1000, forever: true};
-    myModule.internal.nuxeoImportThreads = 5;
-    myModule.internal.nuxeoImportFolderCapacity = 20;
 
     myModule.internal.$init = async () => {
 
@@ -57,7 +64,7 @@ const nuxeoImport = (inTestMode) => {
             });
         }
 
-        //todo mle conditional db
+        //todo mle conditional db usage
         return Promise.resolve();
 
         return new Promise((resolve, reject) => {
@@ -132,19 +139,35 @@ const nuxeoImport = (inTestMode) => {
     };
 
 
-    myModule.internal.$createOneDoc = async (sourceId, folderName, fileIndex) => {
+    // todo importNeedToBeSafe : verify already exist
+    myModule.internal.$createOneDoc = async (sourceId, folderName, fileIndex, recursiveLevel, recursiveCount) => {
 
         await myModule.internal.$init();
 
-        const fileDocument = myModule.internal.structureGetter(sourceId, folderName, fileIndex);
+        if (myModule.internal.defaultConfiguration.importCountLimit < myModule.internal.importCount) {
+            return Promise.resolve();
+        }
+
+        const fileDocument = myModule.internal.defaultStructureGetter(recursiveLevel || sourceId, folderName, fileIndex);
+        let docCreated;
 
         return myModule.internal.nuxeoClient
             .repository()
-            .create(folderName, fileDocument, myModule.internal.nuxeoClientOption)
+            .create(folderName, fileDocument, myModule.internal.defaultConfiguration.nuxeoClientOption)
             .then((doc) => {
-                //console.log('done ');
-                myModule.internal.importCount++;
-                return Promise.resolve(doc);
+                console.log(myModule.internal.importCount, '$createOneDoc done: ', folderName, fileDocument.name);
+                docCreated = doc;
+
+                if (recursiveLevel > 1) {
+                    return myModule.internal.$createDocs(folderName + '/' + doc.title, recursiveCount, sourceId, recursiveLevel - 1, recursiveCount)
+                        .then(() => {
+                            //myModule.internal.importCount++;
+                            return Promise.resolve(docCreated);
+                        });
+                } else {
+                    myModule.internal.importCount++;
+                    return Promise.resolve(docCreated);
+                }
             })
             .catch((err) => {
                 myModule.internal.importErrorCount++;
@@ -153,15 +176,44 @@ const nuxeoImport = (inTestMode) => {
 
     };
 
-    myModule.internal.$createDocs = async (folderName, docCount, sourceId) => {
+    // todo importNeedToBeSafe
+    myModule.internal.prepareWorkspace = async () => {
+
+        if (!myModule.internal.defaultConfiguration.prepareWorkspace) return Promise.resolve();
+
+        const queryToSearchWorkspace = `SELECT * FROM Document WHERE ecm:primaryType = 'WORKSPACE' AND ecm:path = '${myModule.internal.defaultRepo}'`;
+
+        const ws = await myModule.internal.nuxeoClient
+            .repository()
+            .query({query: queryToSearchWorkspace});
+
+        const workspaceName = myModule.internal.defaultRepo.substr('/default-domain/workspaces/'.length);
+
+        const fileDocument = {
+            'entity-type': 'workspace',
+            name: workspaceName,
+            type: 'Workspace',
+            properties: {
+                'dc:title': workspaceName,
+                'dc:description': 'preparedWorkspace'
+            }
+        };
+
+        return myModule.internal.nuxeoClient
+            .repository()
+            .create(folderName, fileDocument, myModule.internal.defaultConfiguration.nuxeoClientOption)
+
+    };
+
+    myModule.internal.$createDocs = async (folderName, docCount, sourceId, recursiveLevel, recursiveCount) => {
 
         await myModule.internal.$init();
         const now = new Date();
         let todos = [];
 
         for (let i = 0; i < docCount; i++) {
-            const fileName = `test-${now.toISOString()}-${i}`;
-            todos.push(myModule.internal.$createOneDoc(sourceId, folderName, i));
+            // const fileName = `test-${now.toISOString()}-${i}`;
+            todos.push(myModule.internal.$createOneDoc(sourceId, folderName, i, recursiveLevel, recursiveCount));
         }
 
         return await Promise.all(todos);
@@ -187,7 +239,6 @@ const nuxeoImport = (inTestMode) => {
         }
     };
 
-
     myModule.internal.$unlockFolder = async (folderName) => {
 
         await myModule.internal.$init();
@@ -208,12 +259,11 @@ const nuxeoImport = (inTestMode) => {
         return 1;//doc.value;
     };
 
-
-    myModule.internal.$createFolderWithDocs = async (folderName, docCount, sourceId) => {
+    myModule.internal.$createFolderWithDocs = async (rootFolderName, folderName, docCount, sourceId) => {
 
         await myModule.internal.$init();
 
-        if (myModule.internal.importCountLimit < myModule.internal.importCount) {
+        if (myModule.internal.defaultConfiguration.importCountLimit < myModule.internal.importCount) {
             return Promise.resolve();
         }
 
@@ -238,9 +288,9 @@ const nuxeoImport = (inTestMode) => {
             } else {
                 return await myModule.internal.nuxeoClient
                     .repository()
-                    .create(myModule.internal.defaultRepo, newFolder, myModule.internal.nuxeoClientOption)
+                    .create(rootFolderName, newFolder, myModule.internal.defaultConfiguration.nuxeoClientOption)
                     .then(function (doc) {
-                        return myModule.internal.$createDocs(myModule.internal.defaultRepo + folderName, docCount, sourceId);
+                        return myModule.internal.$createDocs(rootFolderName + '/' + folderName, docCount, sourceId);
                     })
                     .catch((err) => {
                         console.error(`Folder Err ${sourceId} - ${folderName} - ${docCount}:`, err.toString().substr(0, 200) + '...');
@@ -251,36 +301,53 @@ const nuxeoImport = (inTestMode) => {
         }
     };
 
-    myModule.internal.$createAndLockFolder = async (folderName, docCount, sourceId) => {
+    myModule.internal.$createAndLockFolder = async (rootFolderName, folderName, docCount, sourceId) => {
 
         await myModule.internal.$init();
 
-        if (myModule.internal.importCountLimit < myModule.internal.importCount) {
+        if (myModule.internal.defaultConfiguration.importCountLimit < myModule.internal.importCount) {
             return Promise.resolve();
         }
 
         try {
             await myModule.internal.$lockFolder(sourceId);
-            await myModule.internal.$createFolderWithDocs(folderName, docCount, sourceId);
+            await myModule.internal.$createFolderWithDocs(rootFolderName, folderName, docCount, sourceId);
             await myModule.internal.$unlockFolder(sourceId);
         } catch (e) {
             console.log('$createFoldersWithDocs break, continue....', '' + e.toString().substr(0, 100) + '...', e);
         }
     };
 
-    // test only
     myModule.internal.$createFoldersWithDocs = async (sourceIdMin, folderCount, docCount) => {
 
         await myModule.internal.$init();
         let results = [];
 
+        console.log('$createFoldersWithDocs: ', sourceIdMin, folderCount, docCount);
         //const now = new Date();
         const min = sourceIdMin; //parseInt(process.env.NUXEO_IMPORT_COUNT_MIN || "20000000000");
         const max = min + folderCount;
+
+        const now = new Date();
+        const rootFolderName = myModule.internal.defaultRepo + '/$createFoldersWithDocs-' + now.toISOString();
+        const rootFolderDoc = {
+            'entity-type': 'document',
+            name: rootFolderName,
+            type: 'Folder',
+            properties: {
+                'dc:title': '$createFoldersWithDocs-' + now.toISOString(),
+                // 'dc:source': sourceId
+            }
+        };
+        const rootFolder = await myModule.internal.nuxeoClient
+            .repository()
+            .create(myModule.internal.defaultRepo, rootFolderDoc, myModule.internal.defaultConfiguration.nuxeoClientOption);
+
         for (let i = min; i < max; i++) {
             //const folderName = `test-${now.toISOString()}-${i}`;
             const folderName = `folderz-${i}`;
-            const result = await myModule.internal.$createFolderWithDocs(folderName, docCount, '' + i);
+            console.log('$createFoldersWithDocs - $createFolderWithDocs: ', folderName, docCount, i);
+            const result = await myModule.internal.$createFolderWithDocs(rootFolderName, folderName, docCount, '' + i);
             //results.push(result);
         }
         return results;
@@ -337,10 +404,27 @@ const nuxeoImport = (inTestMode) => {
             const lines = data.split('\n');
             let linesCount = lines.length;
             let i = 0;
+
+            const now = new Date();
+            const rootFolderName = myModule.internal.defaultRepo + '/$createFoldersWithDocsBasedOnSourceFile-' + now.toISOString();
+            const rootFolderDoc = {
+                'entity-type': 'document',
+                name: rootFolderName,
+                type: 'Folder',
+                properties: {
+                    'dc:title': '$createFoldersWithDocsBasedOnSourceFile-' + now.toISOString(),
+                    // 'dc:source': sourceId
+                }
+            };
+            const rootFolder = await myModule.internal.nuxeoClient
+                .repository()
+                .create(myModule.internal.defaultRepo, rootFolderDoc, myModule.internal.defaultConfiguration.nuxeoClientOption);
+
             while (linesCount > 0) {
                 i = Math.floor(Math.random() * linesCount);
-                const folderName = `folder-${i}`;
-                await myModule.internal.$createAndLockFolder(folderName, myModule.internal.nuxeoImportFolderCapacity, lines[i]);
+                //const folderName = `folder-${i}`;
+                const folderName = `folder-${lines[i]}`;
+                await myModule.internal.$createAndLockFolder(rootFolderName, folderName, myModule.internal.defaultConfiguration.nuxeoImportFolderCapacityLimit, lines[i]);
 
                 lines.splice(i, 1);
                 linesCount--;
@@ -355,12 +439,64 @@ const nuxeoImport = (inTestMode) => {
         return creationCount;
     };
 
+    myModule.internal.$createDemoComplexStructure = async () => {
+
+        await myModule.internal.$init();
+        let results = [];
+        const now = new Date();
+        const min = 0,
+            max = 1,
+            folderCount = 1,
+            recursiveLevel = myModule.internal.defaultConfiguration.recursiveLevel,
+            recursiveCount = myModule.internal.defaultConfiguration.recursiveCount;
+
+        console.log('$createDemoComplexStructure: ', myModule.internal.defaultConfiguration.nuxeoImportThreads, max, folderCount, recursiveLevel, recursiveCount);
+
+        for (let i = min; i < max; i++) {
+            //const folderName = `test-${now.toISOString()}-${i}`;
+            const folderName = `$createDemoComplexStructure-${now.toISOString()}-${i}`;
+
+            let result;
+            try {
+                const newFolder = {
+                    'entity-type': 'document',
+                    name: folderName,
+                    type: 'Folder',
+                    properties: {
+                        'dc:title': folderName,
+                        // 'dc:source': sourceId
+                    }
+                };
+
+                result = await myModule.internal.nuxeoClient
+                    .repository()
+                    .create(myModule.internal.defaultRepo, newFolder, myModule.internal.defaultConfiguration.nuxeoClientOption)
+                    .then(function (doc) {
+                        return myModule.internal.$createDocs(myModule.internal.defaultRepo + '/' + folderName, folderCount, '$createDemoComplexStructure', recursiveLevel, recursiveCount);
+                    })
+                    .catch((err) => {
+                        console.error(`$createDemoComplexStructure Err - ${folderName}:`, err.toString().substr(0, 200) + '...');
+                    });
+
+            } catch (e) {
+                console.log('$createDemoComplexStructure break, continue....', '' + e.toString().substr(0, 100) + '...', e);
+            }
+
+            results.push(result);
+        }
+        return results;
+    };
+
     myModule.internal.$createFoldersWithDocsInParallel = async (count) => {
 
         let parallel = [];
-        let min = parseInt(process.env.NUXEO_IMPORT_COUNT_MIN || "20000000000");
+        let min = myModule.internal.defaultConfiguration.importCountMin;// parseInt(process.env.NUXEO_IMPORT_COUNT_MIN || "200000");
+
         for (let i = 0; i < count; i++) {
-            parallel.push(myModule.internal.$createFoldersWithDocs(min + (myModule.internal.importCountLimit * i), myModule.internal.importCountLimit, myModule.internal.nuxeoImportFolderCapacity));
+            parallel.push(myModule.internal.$createFoldersWithDocs(
+                min + (myModule.internal.defaultConfiguration.importCountLimit * i),
+                myModule.internal.defaultConfiguration.nuxeoImportFolderCapacityLimit,
+                myModule.internal.defaultConfiguration.nuxeoImportFolderCapacityLimit));
         }
         return Promise.all(parallel);
     };
@@ -374,19 +510,38 @@ const nuxeoImport = (inTestMode) => {
         return Promise.all(parallel);
     };
 
-    myModule.public.createFoldersDemo = (options) => {
+    myModule.internal.$createDemoComplexStructureInParallel = async (count) => {
 
-        console.log = () => {
-        };
+        let parallel = [];
+        for (let i = 0; i < count; i++) {
+            parallel.push(myModule.internal.$createDemoComplexStructure());
+        }
+        return Promise.all(parallel);
+    };
+
+
+    myModule.internal.setDefaultConfiguration = (options) => {
+        if (process.env.TRACE_LEVEL !== 'debug') {
+            console.log = () => {
+            };
+        }
         if (options && options.defaultRepo) {
             myModule.internal.defaultRepo = options.defaultRepo;
         }
         if (options && options.structureGetter) {
-            myModule.internal.structureGetter = options.structureGetter;
+            myModule.internal.defaultStructureGetter = options.structureGetter;
         }
+        if (options && options.defaultConfiguration) {
+            myModule.internal.defaultConfiguration = options.defaultConfiguration;
+        }
+    };
+
+    myModule.public.createFoldersDemo = (options) => {
+
+        myModule.internal.setDefaultConfiguration(options);
 
         return through.obj((file, encoding, cb) => {
-                myModule.internal.$createFoldersWithDocsInParallel(myModule.internal.nuxeoImportThreads)
+                myModule.internal.$createFoldersWithDocsInParallel(myModule.internal.defaultConfiguration.nuxeoImportThreads)
                     .then((creationCounts) => {
                         console.warn('Folder Demo creationCount:', myModule.internal.importCount, myModule.internal.importErrorCount, creationCounts);
                         cb(null, file);
@@ -397,24 +552,15 @@ const nuxeoImport = (inTestMode) => {
             },
             (cb) => {
                 cb(null);
-
             });
     };
 
     myModule.public.createFoldersFromFile = (options) => {
 
-        console.log = () => {
-        };
-
-        if (options && options.defaultRepo) {
-            myModule.internal.defaultRepo = options.defaultRepo;
-        }
-        if (options && options.structureGetter) {
-            myModule.internal.structureGetter = options.structureGetter;
-        }
+        myModule.internal.setDefaultConfiguration(options);
 
         return through.obj((file, encoding, cb) => {
-                myModule.internal.$createFoldersWithDocsBasedOnSourceFileInParallel(file.path, myModule.internal.nuxeoImportThreads)
+                myModule.internal.$createFoldersWithDocsBasedOnSourceFileInParallel(file.path, myModule.internal.defaultConfiguration.nuxeoImportThreads)
                     .then((creationCounts) => {
                         console.warn('Folder creationCount:', myModule.internal.importCount, myModule.internal.importErrorCount, creationCounts);
                         cb(null, file);
@@ -428,11 +574,9 @@ const nuxeoImport = (inTestMode) => {
             });
     };
 
-
     myModule.public.createUsersFromEmailFile = (options) => {
-        //if (!sourceFile || typeof sourceFile !== 'string') {
-        //    throw new Error('SourceFile is required!')
-        //}
+
+        myModule.internal.setDefaultConfiguration(options);
 
         return through.obj((file, encoding, cb) => {
                 myModule.internal.$createUsersFromEmailFile(file.path)
@@ -452,6 +596,24 @@ const nuxeoImport = (inTestMode) => {
             });
     };
 
+    myModule.public.createDemoComplexStructure = (options) => {
+
+        myModule.internal.setDefaultConfiguration(options);
+
+        return through.obj((file, encoding, cb) => {
+                myModule.internal.$createDemoComplexStructureInParallel(myModule.internal.defaultConfiguration.nuxeoImportThreads)
+                    .then((creationCounts) => {
+                        console.warn('DemoComplexStructure creationCount:', myModule.internal.importCount, myModule.internal.importErrorCount, creationCounts);
+                        cb(null, file);
+                    })
+                    .catch((err) => {
+                        cb(err);
+                    });
+            },
+            (cb) => {
+                cb(null);
+            });
+    };
 
     return myModule;
 };

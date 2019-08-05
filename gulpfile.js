@@ -7,30 +7,40 @@ const {nuxeoRead} = require('./src/nuxeo-read');
 // Extra configs :
 let myImportOptions = {};
 try {
-    myImportOptions =require('./extra').myImportOptions;
-} catch(e) {}
+    myImportOptions = require('./extra').myImportOptions;
+} catch (e) {
+}
 let myReadOptions = {};
 try {
-    myReadOptions =require('./extra').myReadOptions;
-} catch(e) {}
+    myReadOptions = require('./extra').myReadOptions;
+} catch (e) {
+}
 
+// Tasks functions :
 function userImport() {
     return src('./inputs/email.toimport.*')
         .pipe(nuxeoImport.createUsersFromEmailFile());
 }
 
 function foldersDemoImport() {
-    return parallel(nuxeoImport.createFoldersDemo(myImportOptions));
+    return src('./inputs/email.toimport.*')
+        .pipe(nuxeoImport.createFoldersDemo(myImportOptions));
 }
 
+// todo : foldersFromFileImport not working
 function foldersFromFileImport() {
     return src('./inputs/ids.toimport.*')
         .pipe(nuxeoImport.createFoldersFromFile(myImportOptions));
 }
 
+function createDemoComplexStructure() {
+    return src('./inputs/email.toimport.*')
+        .pipe(nuxeoImport.createDemoComplexStructure(myImportOptions));
+}
+
 function readFromFileRampUp() {
     return src('./inputs/email-ids.toread.*')
-        .pipe(nuxeoRead.searchAsManyUsersForDocumentsAndReadThem(myReadOptions));
+        .pipe(nuxeoRead.searchAsManyUsersForDocumentListAndReadThem(myReadOptions));
 }
 
 function readDocumentsFromFile() {
@@ -40,10 +50,14 @@ function readDocumentsFromFile() {
 
 // Tasks :
 exports.userImport = userImport;
+
 exports.foldersDemoImport = foldersDemoImport;
 exports.foldersFromFileImport = foldersFromFileImport;
+exports.createDemoComplexStructure = createDemoComplexStructure;
+
 exports.readFromFileRampUp = readFromFileRampUp;
 exports.readDocumentsFromFile = readDocumentsFromFile;
+
 exports.allImport = series(userImport, foldersDemoImport);
 exports.all = series(userImport, foldersDemoImport, readFromFileRampUp);
 exports.default = series(readFromFileRampUp);

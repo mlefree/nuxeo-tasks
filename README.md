@@ -34,12 +34,12 @@ nohup docker-compose up mongo > docker-compose.out 2>&1 &
 
 ## Todo
 
-- **TODO** extend configuration
-- **TODO** add tasks
+- **TODO** mongodb useability (switch) in order to store (or not) id created
+- **TODO** add tasks ?
 
 
 ## Contributors
 
 Please pull/request the project.
 
-Contribs : @mleprevost
+Contribs : @mat_cloud

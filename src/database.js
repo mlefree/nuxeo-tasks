@@ -1,6 +1,5 @@
 const MongoClient = require('mongodb').MongoClient;
-const assert = require('assert');
-
+// const assert = require('assert');
 
 const databaseModule = (inTestMode) => {
     let myModule = {};
@@ -8,10 +7,8 @@ const databaseModule = (inTestMode) => {
     myModule.public = {};
     myModule.internal.client = null;
 
-
     myModule.internal.url = 'mongodb://root:example@localhost:8611'; //'mongodb://localhost:27017';
     myModule.internal.dbName = 'myproject';
-
 
     myModule.public.$connect = () => {
 

@@ -37,23 +37,32 @@ const nuxeoRead = (inTestMode) => {
     myModule.internal.nuxeoClients = {};
     myModule.internal.database = null;
     myModule.internal.brutInfoStream = null;
-    //myModule.internal.defaultRepo = '/default-domain/workspaces/test-perf-node/';
-    myModule.internal.testReadQuery = "SELECT * FROM Document"
-        + " WHERE ecm:primaryType = 'myNote'"
-        + " AND ecm:path STARTSWITH '/default-domain/workspaces/'"
-    //+ " AND content/data IS NOT NULL"
-    //+ " AND dc:title <> content/name"
-    //+ " AND ecm:isProxy = 0 AND ecm:isCheckedInVersion = 0"
-    //+ " AND ecm:currentLifeCycleState != 'deleted'"
-    ;
-    myModule.internal.testSampleQuery = "SELECT ecm:uuid, ecm:fulltextScore FROM Document WHERE ecm:fulltext = '*'";
-    myModule.internal.nuxeoClientOption = {transactionTimeout: 1000, timeout: 1000};//, forever: true};
+
+    myModule.internal.defaultConfiguration = {
+        nuxeoClientOption: {transactionTimeout: 1000, timeout: 1000} //, forever: true};
+    };
+    myModule.internal.defaultSchemasGetter = (userid, query) => {
+        return ['dublincore', 'file'];
+    };
+    myModule.internal.defaultNXQLQueryGetter = (userid, arg1, arg2) => {
+        return "SELECT * FROM Document"
+            + " WHERE ecm:primaryType = 'file'"
+            + " AND ecm:path STARTSWITH '/default-domain/workspaces/'"
+            //+ " AND content/data IS NOT NULL"
+            //+ " AND dc:title <> content/name"
+            //+ " AND ecm:isProxy = 0 AND ecm:isCheckedInVersion = 0"
+            //+ " AND ecm:currentLifeCycleState != 'deleted'"
+            ;
+        // myModule.internal.testSampleQuery = "SELECT ecm:uuid, ecm:fulltextScore FROM Document WHERE ecm:fulltext = '*'";
+    };
 
     myModule.internal.isAhead = () => {
         const t1 = myModule.internal.readTimeLimit.getTime();
         const t2 = new Date().getTime();
         const b = t1 > t2;
-        //console.log('isAhead', b, myModule.internal.readTimeLimit.toISOString());
+        if (!b) {
+            console.log('is Not Ahead', b, myModule.internal.readTimeLimit.toISOString());
+        }
         return b;
     };
 
@@ -61,7 +70,9 @@ const nuxeoRead = (inTestMode) => {
         const t1 = myModule.internal.readTimeLimit.getTime();
         const t2 = new Date().getTime() + delayInMs;
         const b = t1 < t2;
-        //console.log('willBeTooLate', b, t1, t2);
+        if (b) {
+            console.log('willBeTooLate', b, t1, t2);
+        }
         return b;
     };
 
@@ -99,12 +110,12 @@ const nuxeoRead = (inTestMode) => {
 
         await myModule.internal.$init();
 
-        let query = myModule.internal.testReadQuery;
+        let query = myModule.internal.defaultNXQLQueryGetter();
         console.log(query);
 
         return myModule.internal.nuxeoClient
             .repository()
-            .schemas(['dublincore', 'file'])
+            .schemas(myModule.internal.defaultSchemasGetter())
             .query({query: query})
             ;
     };
@@ -120,7 +131,7 @@ const nuxeoRead = (inTestMode) => {
 
         return myModule.internal.nuxeoClient
             .repository()
-            .schemas(['dublincore', 'file'])
+            .schemas(myModule.internal.defaultSchemasGetter())
             .query({query: query})
             .then(doc => {
                 doc.requestTimeSpentInMs = new Date() - beforeRequest;
@@ -150,7 +161,7 @@ const nuxeoRead = (inTestMode) => {
         return myModule.internal.nuxeoClient
             .operation(op)
             .input(input)
-            .schemas(['dublincore', 'file'])
+            .schemas(myModule.internal.defaultSchemasGetter())
             //   .params({
             //     name: 'workspaces',
             //   })
@@ -246,10 +257,9 @@ const nuxeoRead = (inTestMode) => {
 
         const beforeRequest = new Date();
 
-        // TODO remove csc schema
         return myModule.internal.nuxeoClients[clientId]
             .repository()
-            .schemas(['dublincore', 'file', 'csc'])
+            .schemas(myModule.internal.defaultSchemasGetter(clientId, query))
             //.enricher('document', 'thumbnail')
             .query(query)
             .then(doc => {
@@ -269,13 +279,14 @@ const nuxeoRead = (inTestMode) => {
             });
     };
 
-    myModule.internal.$multipleSearchDocumentList = async (clientId, folderId, category, report) => {
+    myModule.internal.$multipleSearchDocumentList = async (clientId, arg1, arg2, report) => {
 
         let docs = {entries: []};
         try {
-            console.log('launch query: ', myModule.internal.isAhead(), clientId);
+            const query = myModule.internal.defaultNXQLQueryGetter(clientId, arg1, arg2);
+            console.log('launch query: ', query, myModule.internal.isAhead(), clientId);
             docs = await myModule.internal.$multipleReadQuery(clientId, {
-                query: `SELECT * FROM Document WHERE ecm:primaryType = 'myNote'  AND ecm:isTrashed = 0 AND csc:NumAVS = "${folderId}" AND csc:Categorie = "${category}"`, // "${folderId}" AND "${category}"
+                query: query,
                 currentPageIndex: 0
             });
             report = myModule.internal.updatedReport(clientId, report, docs);
@@ -297,9 +308,7 @@ const nuxeoRead = (inTestMode) => {
                 query: `SELECT * FROM Document WHERE ecm:uuid = "${docToFind.uid}"`
             });
 
-            if (docsFound.entries.length === 1 &&
-                docsFound.entries[0].properties['csc:NumAVS'] === '' + folderId &&
-                docsFound.entries[0].properties['csc:Categorie'] === '' + category) {
+            if (docsFound.entries.length === 1) {
                 //console.log('doc found ', clientId, docsFound.entries[0]);
                 report = myModule.internal.updatedReport(clientId, report, docsFound);
             } else {
@@ -317,26 +326,26 @@ const nuxeoRead = (inTestMode) => {
         return report;
     };
 
-    myModule.internal.$multipleSearchDocuments = async (clientId, folderId, category) => {
+    myModule.internal.multipleSearchDocuments = async (clientId, arg1, arg2) => {
 
         let report = {};
         await myModule.internal.$initMultiple(clientId);
 
         while (myModule.internal.isAhead()) {
 
-            let docs = await myModule.internal.$multipleSearchDocumentList(clientId, folderId, category, report);
-            console.log('docs.entries.length:', clientId, docs.entries.length, folderId, category);
+            let docs = await myModule.internal.$multipleSearchDocumentList(clientId, arg1, arg2, report);
+            console.log('docs.entries.length:', clientId, docs.entries.length, arg1, arg2);
 
             if (!docs || !docs.entries || docs.entries.length < 2) {
-                console.warn('Bad data: ', clientId, docs.entries.length, folderId, category);
+                console.warn('PB ? Should be a list of docs: ', clientId, docs.entries.length, arg1, arg2);
             } else {
                 await timeout(2000);
                 let docToFind = docs.entries[parseInt(Math.random() * (docs.entries.length - 1))];
-                await myModule.internal.$multipleSearchDocument(clientId, folderId, category, docToFind, report);
+                await myModule.internal.$multipleSearchDocument(clientId, arg1, arg2, docToFind, report);
 
                 await timeout(20000);
                 docToFind = docs.entries[parseInt(Math.random() * (docs.entries.length - 1))];
-                await myModule.internal.$multipleSearchDocument(clientId, folderId, category, docToFind, report);
+                await myModule.internal.$multipleSearchDocument(clientId, arg1, arg2, docToFind, report);
 
                 await timeout(20000);
             }
@@ -381,7 +390,7 @@ const nuxeoRead = (inTestMode) => {
         return report;
     };
 
-    myModule.internal.$multipleSearchDocumentsWithDelay = async (clientId, folderId, category, delayInMs) => {
+    myModule.internal.$multipleSearchDocumentsWithDelay = async (clientId, arg1, arg2, delayInMs) => {
 
         if (myModule.internal.willBeTooLate(delayInMs)) {
             return {};
@@ -393,7 +402,7 @@ const nuxeoRead = (inTestMode) => {
             return {};
         }
 
-        const report = await myModule.internal.$multipleSearchDocuments(clientId, folderId, category);
+        const report = await myModule.internal.multipleSearchDocuments(clientId, arg1, arg2);
 
         return report;
     };
@@ -405,7 +414,7 @@ const nuxeoRead = (inTestMode) => {
         return report;
     };
 
-    myModule.internal.$searchAsManyUsersForDocumentsAndReadThem = async (sourceFilename) => {
+    myModule.internal.$searchAsManyUsersForDocumentListAndReadThem = async (sourceFilename) => {
 
         const data = await readFile(sourceFilename, 'utf8');
         const lines = data.split('\n');
@@ -413,10 +422,10 @@ const nuxeoRead = (inTestMode) => {
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i].split(',');
             const addr = emailAddresses.parseOneAddress(line[0]);
-            const folderId = parseInt(line[1]);
-            const category = parseInt(line[2]);
-            if (addr && folderId && category) {
-                parallels.push(myModule.internal.$multipleSearchDocumentsWithDelay(addr.address, folderId, category, i * 3500));
+            const arg1 = parseInt(line[1]);
+            const arg2 = line[2];//parseInt(line[2]);
+            if (addr && arg1 && arg2) {
+                parallels.push(myModule.internal.$multipleSearchDocumentsWithDelay(addr.address, arg1, arg2, i * 3500));
             }
         }
         const reports = await Promise.all(parallels);
@@ -424,11 +433,12 @@ const nuxeoRead = (inTestMode) => {
 
         try {
             const count = await myModule.internal.$readQuery({
-                query: `SELECT * FROM Document WHERE ecm:mixinType != HiddenInNavigation AND ecm:isProxy = 0 AND ecm:isVersion = 0 AND ecm:isTrashed = 0`
+                //query: `SELECT * FROM Document WHERE ecm:mixinType != HiddenInNavigation AND ecm:isProxy = 0 AND ecm:isVersion = 0 AND ecm:isTrashed = 0`
+                query: `SELECT * FROM Document`
             });
             report.docCount = count.resultsCount;
         } catch (error) {
-            console.error('$searchAsManyUsersForDocumentsAndReadThem error', new Date().toISOString(), error);
+            console.error('$searchAsManyUsersForDocumentListAndReadThem error', new Date().toISOString(), error);
         }
 
         return report;
@@ -449,30 +459,45 @@ const nuxeoRead = (inTestMode) => {
         return reports;
     };
 
-    myModule.public.searchAsManyUsersForDocumentsAndReadThem = (options) => {
-
-        console.log = () => {
-        };
-
+    myModule.internal.setDefaultConfiguration = (options) => {
+        if (process.env.TRACE_LEVEL !== 'debug') {
+            console.log = () => {
+            };
+        }
         if (options && options.readTimeLimitInSec) {
             myModule.internal.readTimeLimit.setSeconds(myModule.internal.readTimeLimit.getSeconds() + options.readTimeLimitInSec);
         } else {
             myModule.internal.readTimeLimit.setSeconds(myModule.internal.readTimeLimit.getSeconds() + 10);
         }
+        if (options && options.NXQLQueryGetter) {
+            myModule.internal.defaultNXQLQueryGetter = options.NXQLQueryGetter;
+        }
+        if (options && options.schemasGetter) {
+            myModule.internal.defaultSchemasGetter = options.schemasGetter;
+        }
+        if (options && options.defaultConfiguration) {
+            myModule.internal.defaultConfiguration = options.defaultConfiguration;
+        }
+    };
+
+
+    myModule.public.searchAsManyUsersForDocumentListAndReadThem = (options) => {
+
+        myModule.internal.setDefaultConfiguration(options);
 
         const jobDate = new Date();
 
         return through.obj((file, encoding, cb) => {
-                let brutInfoStream = fs.createWriteStream(`report-searchAsManyUsersForDocumentsAndReadThem-${jobDate.toISOString()}.gitignored.csv`);
+                let brutInfoStream = fs.createWriteStream(`./outputs/report-searchAsManyUsersForDocumentsAndReadThem-${jobDate.toISOString()}.gitignored.csv`);
                 brutInfoStream.once('open', () => {
 
                     myModule.internal.brutInfoStream = brutInfoStream;
-                    myModule.internal.$searchAsManyUsersForDocumentsAndReadThem(file.path)
+                    myModule.internal.$searchAsManyUsersForDocumentListAndReadThem(file.path)
                         .then((readReport) => {
                             console.warn('Final report, total of docs:', readReport.docCount, '\nrequests average:', myModule.internal.summarizedReports(readReport.entries));
 
                             brutInfoStream.end();
-                            let reportFile = fs.createWriteStream(`report-searchAsManyUsersForDocumentsAndReadThem-${jobDate.toISOString()}.gitignored.json`);
+                            let reportFile = fs.createWriteStream(`./outputs/report-searchAsManyUsersForDocumentsAndReadThem-${jobDate.toISOString()}.gitignored.json`);
                             reportFile.once('open', () => {
                                 reportFile.write(JSON.stringify(readReport));
                                 reportFile.end();
@@ -492,13 +517,12 @@ const nuxeoRead = (inTestMode) => {
 
     myModule.public.searchForDocumentsAndReadThem = (options) => {
 
-        console.log = () => {
-        };
+        myModule.internal.setDefaultConfiguration(options);
 
         const jobDate = new Date();
 
         return through.obj((file, encoding, cb) => {
-                let brutInfoStream = fs.createWriteStream(`report-searchForDocumentsAndReadThem-${jobDate.toISOString()}.gitignored.csv`);
+                let brutInfoStream = fs.createWriteStream(`./outputs/report-searchForDocumentsAndReadThem-${jobDate.toISOString()}.gitignored.csv`);
                 brutInfoStream.once('open', () => {
 
                     myModule.internal.brutInfoStream = brutInfoStream;
@@ -507,7 +531,7 @@ const nuxeoRead = (inTestMode) => {
                             console.warn('Final report, total of docs:', readReport.length);
 
                             brutInfoStream.end();
-                            let reportFile = fs.createWriteStream(`report-searchForDocumentsAndReadThem-${jobDate.toISOString()}.gitignored.json`);
+                            let reportFile = fs.createWriteStream(`./outputs/report-searchForDocumentsAndReadThem-${jobDate.toISOString()}.gitignored.json`);
                             reportFile.once('open', () => {
                                 reportFile.write(JSON.stringify(readReport));
                                 reportFile.end();
