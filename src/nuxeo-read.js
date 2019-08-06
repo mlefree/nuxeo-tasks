@@ -338,16 +338,18 @@ const nuxeoRead = (inTestMode) => {
 
             if (!docs || !docs.entries || docs.entries.length < 2) {
                 console.warn('PB ? Should be a list of docs: ', clientId, docs.entries.length, arg1, arg2);
+                report.errorCount++;
+                await timeout(22000);
             } else {
                 await timeout(2000);
                 let docToFind = docs.entries[parseInt(Math.random() * (docs.entries.length - 1))];
                 await myModule.internal.$multipleSearchDocument(clientId, arg1, arg2, docToFind, report);
 
-                await timeout(20000);
+                await timeout(10000);
                 docToFind = docs.entries[parseInt(Math.random() * (docs.entries.length - 1))];
                 await myModule.internal.$multipleSearchDocument(clientId, arg1, arg2, docToFind, report);
 
-                await timeout(20000);
+                await timeout(10000);
             }
         }
 
