@@ -1,5 +1,3 @@
-'use strict';
-
 const fs = require('fs');
 const through = require('through2');
 const Nuxeo = require('nuxeo');

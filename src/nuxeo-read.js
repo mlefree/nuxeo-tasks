@@ -1,5 +1,3 @@
-'use strict';
-
 const fs = require('fs');
 const through = require('through2');
 const Nuxeo = require('nuxeo');
@@ -42,12 +40,12 @@ const nuxeoRead = (inTestMode) => {
         nuxeoClientOption: {transactionTimeout: 1000, timeout: 1000} //, forever: true};
     };
     myModule.internal.defaultSchemasGetter = (userid, query) => {
-        return ['dublincore', 'file'];
+        return ['dublincore', 'ecm'];
     };
     myModule.internal.defaultNXQLQueryGetter = (userid, arg1, arg2) => {
         return "SELECT * FROM Document"
-            + " WHERE ecm:primaryType = 'file'"
-            + " AND ecm:path STARTSWITH '/default-domain/workspaces/'"
+            // + " WHERE ecm:primaryType = 'file'"
+            // + " AND ecm:path STARTSWITH '/default-domain/workspaces/'"
             //+ " AND content/data IS NOT NULL"
             //+ " AND dc:title <> content/name"
             //+ " AND ecm:isProxy = 0 AND ecm:isCheckedInVersion = 0"
@@ -251,32 +249,32 @@ const nuxeoRead = (inTestMode) => {
         return reduce;
     };
 
-    myModule.internal.$multipleReadQuery = async (clientId, query) => {
+    myModule.internal.$multipleReadQuery = async (clientId, arg1, arg2, query) => {
 
-        await myModule.internal.$initMultiple(clientId);
+        await myModule.internal.$initMultiple(clientId, arg1, arg2);
 
         const beforeRequest = new Date();
 
-        return myModule.internal.nuxeoClients[clientId]
-            .repository()
-            .schemas(myModule.internal.defaultSchemasGetter(clientId, query))
-            //.enricher('document', 'thumbnail')
-            .query(query)
-            .then(doc => {
-                const afterRequest = new Date();
-                doc.requestTimeSpentInMs = afterRequest - beforeRequest;
-                //console.log('found : ', doc);
-                if (myModule.internal.brutInfoStream && myModule.internal.brutInfoStream.write) {
-                    myModule.internal.brutInfoStream.write('' + clientId + ',' + query.query + ',' + beforeRequest.toISOString() + ',' + afterRequest.toISOString() + ',' + doc.requestTimeSpentInMs + '\r\n');
-                }
-                return Promise.resolve(doc);
-            })
-            .catch(err => {
-                const doc = {};
-                doc.requestTimeSpentInMs = new Date() - beforeRequest;
-                // console.error(err);
-                return Promise.reject(err);
-            });
+        try {
+            return await myModule.internal.nuxeoClients[clientId]
+                .repository()
+                // .schemas(myModule.internal.defaultSchemasGetter(clientId, query))
+                //.enricher('document', 'thumbnail')
+                .query(query)
+                .then(doc => {
+                    const afterRequest = new Date();
+                    doc.requestTimeSpentInMs = afterRequest - beforeRequest;
+                    //console.log('found : ', doc);
+                    if (myModule.internal.brutInfoStream && myModule.internal.brutInfoStream.write) {
+                        myModule.internal.brutInfoStream.write('' + clientId + ',' + query.query + ',' + beforeRequest.toISOString() + ',' + afterRequest.toISOString() + ',' + doc.requestTimeSpentInMs + '\r\n');
+                    }
+                    return Promise.resolve(doc);
+                });
+        } catch (err) {
+            const doc = {};
+            doc.requestTimeSpentInMs = new Date() - beforeRequest;
+            // console.error(err);
+        }
     };
 
     myModule.internal.$multipleSearchDocumentList = async (clientId, arg1, arg2, report) => {
@@ -285,7 +283,7 @@ const nuxeoRead = (inTestMode) => {
         try {
             const query = myModule.internal.defaultNXQLQueryGetter(clientId, arg1, arg2);
             console.log('launch query: ', query, myModule.internal.isAhead(), clientId);
-            docs = await myModule.internal.$multipleReadQuery(clientId, {
+            docs = await myModule.internal.$multipleReadQuery(clientId, arg1, arg2, {
                 query: query,
                 currentPageIndex: 0
             });
@@ -300,11 +298,11 @@ const nuxeoRead = (inTestMode) => {
         return docs;
     };
 
-    myModule.internal.$multipleSearchDocument = async (clientId, folderId, category, docToFind, report) => {
+    myModule.internal.$multipleSearchDocument = async (clientId, arg1, arg2, docToFind, report) => {
 
         console.log('launch queries: ', myModule.internal.isAhead(), clientId);
         try {
-            const docsFound = await myModule.internal.$multipleReadQuery(clientId, {
+            const docsFound = await myModule.internal.$multipleReadQuery(clientId, arg1, arg2, {
                 query: `SELECT * FROM Document WHERE ecm:uuid = "${docToFind.uid}"`
             });
 
@@ -329,7 +327,7 @@ const nuxeoRead = (inTestMode) => {
     myModule.internal.multipleSearchDocuments = async (clientId, arg1, arg2) => {
 
         let report = {};
-        await myModule.internal.$initMultiple(clientId);
+        await myModule.internal.$initMultiple(clientId, arg1, arg2);
 
         while (myModule.internal.isAhead()) {
 
@@ -424,7 +422,7 @@ const nuxeoRead = (inTestMode) => {
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i].split(',');
             const addr = emailAddresses.parseOneAddress(line[0]);
-            const arg1 = parseInt(line[1]);
+            const arg1 = line[1];
             const arg2 = line[2];//parseInt(line[2]);
             if (addr && arg1 && arg2) {
                 parallels.push(myModule.internal.$multipleSearchDocumentsWithDelay(addr.address, arg1, arg2, i * 3500));
@@ -436,7 +434,8 @@ const nuxeoRead = (inTestMode) => {
         try {
             const count = await myModule.internal.$readQuery({
                 //query: `SELECT * FROM Document WHERE ecm:mixinType != HiddenInNavigation AND ecm:isProxy = 0 AND ecm:isVersion = 0 AND ecm:isTrashed = 0`
-                query: `SELECT * FROM Document`
+                query: `SELECT *
+                        FROM Document`
             });
             report.docCount = count.resultsCount;
         } catch (error) {
