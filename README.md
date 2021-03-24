@@ -3,17 +3,17 @@ Nuxeo node task examples like import folders, users, reading documents...
 
 ![Screen01](screenshots/nuxeo-tasks-01.gif)
 
-## Prerequisites
+## Install
 
-Tools like : Node, npm, docker, docker-compose, gulp-cli.
+You need tools like : Node, npm, docker, docker-compose, gulp-cli.
 
-Then install project :
-```bash
-npm i
-npm i -g gulp-cli
-```
+1. Install project `npm i`
+1. Install _gulp_ locally `npm i -g gulp-cli`
+1. Edit your *.env* file (you can copy *.env.example*).
+1. Create your inputs files like _./inputs/email.toimport.gitignored.csv_  or _./inputs/email-ids.toread.gitignored.csv_
 
-Launch task:
+## Launch tasks
+
 ```bash
 # discover tasks available
 gulp --tasks
@@ -29,17 +29,10 @@ nohup gulp readFromFileRampUp --max-old-space-size=4096 > gulp-read.out 2>&1 &
 # or if you already have a nuxeo env, mongo only
 docker-compose up mongo
 nohup docker-compose up mongo > docker-compose.out 2>&1 &
-
 ```
-
-## Todo
-
-- **TODO** mongodb useability (switch) in order to store (or not) id created
-- **TODO** add tasks ?
-
 
 ## Contributors
 
 Please pull/request the project.
 
-Contribs : @mat_cloud
+Contacts : @mat_cloud

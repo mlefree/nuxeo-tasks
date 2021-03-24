@@ -1,6 +1,6 @@
 {
   "name": "nuxeo-tasks",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "nuxeo task examples",
   "main": "gulpfile.js",
   "scripts": {
@@ -14,7 +14,7 @@
     "nuxeo",
     "node"
   ],
-  "author": "mle",
+  "author": "mlefree",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/mlefree/nuxeo-tasks/issues"
@@ -28,5 +28,11 @@
     "nuxeo": "^3.11.0",
     "random-sentence": "^1.0.4",
     "uuid": "^3.3.2"
+  },
+  "jshintConfig": {
+    "mocha": true,
+    "node": true,
+    "browser": false,
+    "esversion": 8
   }
 }

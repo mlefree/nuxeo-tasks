@@ -2,7 +2,6 @@ const dotenv = require('dotenv').config();
 const {src, dest, task, parallel, series} = require('gulp');
 const {nuxeoImport} = require('./src/nuxeo-import');
 const {nuxeoRead} = require('./src/nuxeo-read');
-// todo workflow tasks using : const workflowTest = require('nuxeo-workflow-test/index');
 
 // Extra configs :
 let myImportOptions = {};
@@ -27,7 +26,6 @@ function createFoldersDemo() {
         .pipe(nuxeoImport.createFoldersDemo(myImportOptions));
 }
 
-// todo : fix foldersFromFileImport - not working
 function foldersFromFileImport() {
     return src('./inputs/ids.toimport.*')
         .pipe(nuxeoImport.createFoldersFromFile(myImportOptions));
@@ -53,7 +51,7 @@ exports.userImport = userImport;
 
 exports.createFoldersDemo = createFoldersDemo;
 exports.createDemoComplexStructure = createDemoComplexStructure;
-exports.foldersFromFileImport = foldersFromFileImport;
+// TODO fix : exports.foldersFromFileImport = foldersFromFileImport;
 
 exports.readFromFileRampUp = readFromFileRampUp;
 exports.readDocumentsFromFile = readDocumentsFromFile;
