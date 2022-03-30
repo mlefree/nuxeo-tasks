@@ -22,11 +22,13 @@
   "homepage": "https://github.com/mlefree/nuxeo-tasks#readme",
   "dependencies": {
     "dotenv": "^7.0.0",
-    "email-addresses": "^3.0.3",
+    "email-addresses": "^4.0.0",
+    "glob-parent": "^6.0.0",
     "gulp": "^4.0.0",
     "mongodb": "^3.2.2",
     "nuxeo": "^3.11.0",
     "random-sentence": "^1.0.4",
+    "through2": "^2.0.5",
     "uuid": "^3.3.2"
   },
   "jshintConfig": {
