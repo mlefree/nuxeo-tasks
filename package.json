@@ -3,7 +3,9 @@
   "version": "1.0.1",
   "description": "nuxeo task examples",
   "main": "gulpfile.js",
-  "scripts": {},
+  "scripts": {
+    "preinstall": "npx npm-force-resolutions"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mlefree/nuxeo-tasks.git"
@@ -19,13 +21,16 @@
   },
   "homepage": "https://github.com/mlefree/nuxeo-tasks#readme",
   "dependencies": {
-    "dotenv": "^7.0.0",
-    "email-addresses": "^4.0.0",
-    "gulp": "^4.0.0",
+    "dotenv": "^16.0.0",
+    "email-addresses": "^5.0.0",
+    "gulp": "^4.0.2",
     "mongodb": "^3.7.3",
     "nuxeo": "^3.18.0",
     "random-sentence": "^1.0.4",
-    "uuid": "^3.3.2"
+    "uuid": "^8.3.2"
+  },
+  "resolutions": {
+    "glob-parent": "^6.0.1"
   },
   "jshintConfig": {
     "mocha": true,

@@ -58,7 +58,7 @@ class NuxeoCollection extends NuxeoCommon {
 
         for (let document of documents) {
             for (let collection of collections) {
-               const operationPromise = this.nuxeoClient
+                const operationPromise = this.nuxeoClient
                     .operation('Document.AddToCollection')
                     .params({
                         collection: collection.uid
@@ -66,7 +66,7 @@ class NuxeoCollection extends NuxeoCommon {
                     .input(document.uid)
                     .execute();
 
-                if ( promises.length < NuxeoCollection.PROMISE_PARALLEL_LIMIT) {
+                if (promises.length < NuxeoCollection.PROMISE_PARALLEL_LIMIT) {
                     promises.push(operationPromise);
                 } else {
                     await Promise.all(promises);
@@ -89,19 +89,11 @@ class NuxeoCollection extends NuxeoCommon {
         await nuxeoCollection.init();
         await nuxeoCollection.createFolder(NuxeoCollection.FOLDER_PATH);
 
-        const created1 = await nuxeoCollection.createFilesAndCollections(NuxeoCollection.FOLDER_PATH, 10);
-        await nuxeoCollection.addConnections(created1.files, created1.collections);
-
-        const created2 = await nuxeoCollection.createFilesAndCollections(NuxeoCollection.FOLDER_PATH, 100);
-        await nuxeoCollection.addConnections(created2.files, created2.collections);
-
-        const created3 = await nuxeoCollection.createFilesAndCollections(NuxeoCollection.FOLDER_PATH, 1000);
-        await nuxeoCollection.addConnections(created3.files, created3.collections);
-
-        //const created4 = await nuxeoCollection.createFilesAndCollections(NuxeoCollection.FOLDER_PATH, 10000);
-        //await nuxeoCollection.addConnections(created4.files, created4.collections);
+        for (const count of [10, 100, 200, 300, 600]) {
+            const created = await nuxeoCollection.createFilesAndCollections(NuxeoCollection.FOLDER_PATH, count);
+            await nuxeoCollection.addConnections(created.files, created.collections);
+        }
     }
-
 
     static async challengeCleanUp() {
         const nuxeoCollection = new NuxeoCollection();
