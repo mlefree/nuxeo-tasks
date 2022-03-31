@@ -461,7 +461,7 @@ const nuxeoRead = (inTestMode) => {
     };
 
     myModule.internal.setDefaultConfiguration = (options) => {
-        if (process.env.TRACE_LEVEL !== 'debug') {
+        if (process.env.TRACE_ENABLED !== 'true') {
             console.log = () => {
             };
         }

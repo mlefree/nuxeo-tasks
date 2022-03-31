@@ -1,61 +1,30 @@
-const dotenv = require('dotenv').config();
-const {src, dest, task, parallel, series} = require('gulp');
-const {nuxeoImport} = require('./src/nuxeo-import');
-const {nuxeoRead} = require('./src/nuxeo-read');
+require('dotenv').config();
+const {NuxeoCollection} = require('./src/nuxeo-collection');
+const {NuxeoImport} = require('./src/nuxeo-import2');
+const {NuxeoRead} = require('./src/nuxeo-read2');
 
-// Extra configs :
-let myImportOptions = {};
+// Enjoy tasks :
+let tasks = {};
+[NuxeoCollection, NuxeoImport, NuxeoRead]
+    .forEach((classObject) => {
+        const allFunction = Object.getOwnPropertyNames(classObject)
+            .filter(prop => (
+                (typeof classObject[prop] === "function") &&
+                ((prop.indexOf('task') >= 0) || (prop.indexOf('challenge') >= 0)))
+            );
+        allFunction.forEach((fnName) => {
+            tasks['' + classObject.name + '-' + fnName] = classObject[fnName];
+        });
+    });
+
+// Extra tasks :
 try {
-    myImportOptions = require('./extra').myImportOptions;
+    const {extraTasks} = require('./extra');
+    tasks = extraTasks(tasks);
 } catch (e) {
-}
-let myReadOptions = {};
-try {
-    myReadOptions = require('./extra').myReadOptions;
-} catch (e) {
+    console.log('Some extra tasks can be created and used (ask raain sales)')
 }
 
-// Tasks functions :
-function userImport() {
-    return src('./inputs/email.toimport.*')
-        .pipe(nuxeoImport.createUsersFromEmailFile());
-}
+// Gulp tasks :
+module.exports = tasks;
 
-function createFoldersDemo() {
-    return src('./inputs/email.toimport.*')
-        .pipe(nuxeoImport.createFoldersDemo(myImportOptions));
-}
-
-function foldersFromFileImport() {
-    return src('./inputs/ids.toimport.*')
-        .pipe(nuxeoImport.createFoldersFromFile(myImportOptions));
-}
-
-function createDemoComplexStructure() {
-    return src('./inputs/email.toimport.*')
-        .pipe(nuxeoImport.createDemoComplexStructure(myImportOptions));
-}
-
-function readFromFileRampUp() {
-    return src('./inputs/email-ids.toread.*')
-        .pipe(nuxeoRead.searchAsManyUsersForDocumentListAndReadThem(myReadOptions));
-}
-
-function readDocumentsFromFile() {
-    return src('./inputs/docs.toread.*')
-        .pipe(nuxeoRead.searchForDocumentsAndReadThem(myReadOptions));
-}
-
-// Tasks :
-exports.userImport = userImport;
-
-exports.createFoldersDemo = createFoldersDemo;
-exports.createDemoComplexStructure = createDemoComplexStructure;
-// TODO fix : exports.foldersFromFileImport = foldersFromFileImport;
-
-exports.readFromFileRampUp = readFromFileRampUp;
-exports.readDocumentsFromFile = readDocumentsFromFile;
-
-exports.allImport = series(userImport, createFoldersDemo);
-exports.all = series(userImport, createFoldersDemo, readFromFileRampUp);
-exports.default = series(readFromFileRampUp);

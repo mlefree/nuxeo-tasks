@@ -3,9 +3,7 @@
   "version": "1.0.1",
   "description": "nuxeo task examples",
   "main": "gulpfile.js",
-  "scripts": {
-    "test": "gulp"
-  },
+  "scripts": {},
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mlefree/nuxeo-tasks.git"
@@ -23,12 +21,10 @@
   "dependencies": {
     "dotenv": "^7.0.0",
     "email-addresses": "^4.0.0",
-    "glob-parent": "^6.0.0",
     "gulp": "^4.0.0",
-    "mongodb": "^3.2.2",
-    "nuxeo": "^3.11.0",
+    "mongodb": "^3.7.3",
+    "nuxeo": "^3.18.0",
     "random-sentence": "^1.0.4",
-    "through2": "^2.0.5",
     "uuid": "^3.3.2"
   },
   "jshintConfig": {

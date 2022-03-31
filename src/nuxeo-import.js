@@ -543,7 +543,7 @@ const nuxeoImport = (inTestMode) => {
 
 
     myModule.internal.setDefaultConfiguration = (options) => {
-        if (process.env.TRACE_LEVEL !== 'debug') {
+        if (process.env.TRACE_ENABLED !== 'true') {
             console.log = () => {
             };
         }
@@ -641,3 +641,50 @@ const nuxeoImport = (inTestMode) => {
 };
 
 exports.nuxeoImport = nuxeoImport(false).public;
+
+
+/*
+
+TODO reinsert tasks :
+function userImport() {
+    return src('./inputs/email.toimport.*')
+        .pipe(nuxeoImport.createUsersFromEmailFile());
+}
+
+function createFoldersDemo() {
+    return src('./inputs/email.toimport.*')
+        .pipe(nuxeoImport.createFoldersDemo(myImportOptions));
+}
+
+function foldersFromFileImport() {
+    return src('./inputs/ids.toimport.*')
+        .pipe(nuxeoImport.createFoldersFromFile(myImportOptions));
+}
+
+function createDemoComplexStructure() {
+    return src('./inputs/email.toimport.*')
+        .pipe(nuxeoImport.createDemoComplexStructure(myImportOptions));
+}
+
+function readFromFileRampUp() {
+    return src('./inputs/email-ids.toread.*')
+        .pipe(nuxeoRead.searchAsManyUsersForDocumentListAndReadThem(myReadOptions));
+}
+
+function readDocumentsFromFile() {
+    return src('./inputs/docs.toread.*')
+        .pipe(nuxeoRead.searchForDocumentsAndReadThem(myReadOptions));
+}
+
+exports.userImport = userImport;
+
+exports.createFoldersDemo = createFoldersDemo;
+exports.createDemoComplexStructure = createDemoComplexStructure;
+exports.readFromFileRampUp = readFromFileRampUp;
+exports.readDocumentsFromFile = readDocumentsFromFile;
+exports.allImport = series(userImport, createFoldersDemo);
+exports.all = series(userImport, createFoldersDemo, readFromFileRampUp);
+exports.default = series(readFromFileRampUp);
+
+ */
+
